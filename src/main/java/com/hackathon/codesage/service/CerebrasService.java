@@ -58,6 +58,11 @@ public class CerebrasService {
             throw new IllegalArgumentException("Invalid programming language: " + language);
         }
 
+        // Validate code parameter (as suggested by AI)
+        if (code == null || code.trim().isEmpty()) {
+            throw new IllegalArgumentException("Code cannot be empty or null");
+        }
+
         String prompt = String.format(
                 """
                 You are an experienced software engineering mentor with expertise across multiple programming languages and paradigms.
@@ -78,7 +83,7 @@ public class CerebrasService {
                      * Java/Spring: @Value("${property}") 
                      * JavaScript: process.env.VARIABLE
                      * Python: os.getenv("VARIABLE")
-                   - Hardcoding values (apiKey = "12345") is ALWAYS UNSAFE
+                   - Hardcoding values (apiKey = "ACTUAL_KEY") is ALWAYS UNSAFE
                 
                 2. INPUT VALIDATION PRINCIPLE
                    - ALL user-provided input MUST be validated

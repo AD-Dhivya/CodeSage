@@ -85,10 +85,10 @@ while IFS= read -r file; do
   esac
 
   # Read file content (limit size)
-  CONTENT=$(cat "$file" | head -c 2048)
-  if [ ${#CONTENT} -ge 2048 ]; then
-    CONTENT="$CONTENT... [truncated]"
-  fi
+CONTENT=$(cat "$file" | head -c 4096)
+if [ ${#CONTENT} -ge 4096 ]; then
+  CONTENT="$CONTENT... [truncated]"
+fi
 
   # Debug: show payload
   echo "📤 Sending to AI backend:"
