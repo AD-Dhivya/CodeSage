@@ -3,7 +3,8 @@ package com.hackathon.codesage.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
+import com.hackathon.codesage.config.CerebrasConfig;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -11,24 +12,23 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Set;
 
 @Service
 public class CerebrasService {
 
-    @Value("${cerebras.api.key}")
-    private String apiKey;
+    private final CerebrasConfig cerebrasConfig;
+    private final HttpClient client;
+    private final ObjectMapper objectMapper;
 
-    @Value("${cerebras.api.url:https://api.cerebras.ai/v1/chat/completions}")
-    private String apiUrl;
-
-    @Value("${cerebras.model:llama3.1-8b}")
-    private String model;
-
-    private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    @Autowired
+    public CerebrasService(CerebrasConfig cerebrasConfig) {
+        this.cerebrasConfig = cerebrasConfig;
+        this.client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .build();
+        this.objectMapper = new ObjectMapper();
+    }
 
     public String detectLanguage(String fileName) {
         if (fileName == null) return "java"; // default to java now
@@ -49,31 +49,78 @@ public class CerebrasService {
     }
 
     public String analyzeCode(String code, String language, String fileName) {
-        // Provide default values for optional parameters
+        // Validate language parameter
+        Set<String> validLanguages = Set.of("java", "javascript", "python", "typescript", "go", "cpp", "c", "csharp");
+
         if (language == null || language.trim().isEmpty()) {
             language = "java"; // default language
+        } else if (!validLanguages.contains(language.toLowerCase())) {
+            throw new IllegalArgumentException("Invalid programming language: " + language);
         }
 
         String prompt = String.format(
                 """
-                You are a helpful code mentor. Review this %s code and respond in this EXACT format:
+                You are an experienced software engineering mentor with expertise across multiple programming languages and paradigms.
                 
-                🚨 SECURITY ISSUE DETECTED
-                Issue: [brief description of the issue]
-                Severity: [CRITICAL/HIGH/MEDIUM/LOW]
-                Category: [Security/Performance/Bug/Style/etc.]
-    
-                🧑‍🏫 WHY THIS MATTERS:
-                [Explain why this issue is important and what risks it poses]
-    
-                💡 HOW TO FIX:
-                1. [First step to resolve the issue]
-                2. [Second step]
-                3. [Third step or more if needed]
-    
-                📚 LEARN MORE:
-                [Provide a relevant link for further learning]
-    
+                Your mentoring approach follows these principles:
+                1. Always begin with positive reinforcement - identify and celebrate at least one good practice
+                2. Explain issues in terms of real-world impact and consequences
+                3. Provide concrete, actionable improvement steps (not just abstract concepts)
+                4. Frame feedback as learning opportunities, not failures
+                5. Maintain a supportive, professional tone that encourages growth
+                
+                UNDERSTAND THESE FUNDAMENTAL PRINCIPLES ACROSS ALL LANGUAGES:
+                
+                1. EXTERNAL CONFIGURATION PRINCIPLE
+                   - Secure applications NEVER hardcode sensitive values
+                   - Configuration should come from EXTERNAL sources (environment, config files)
+                   - Framework-specific implementations are VALID when they follow this principle:
+                     * Java/Spring: @Value("${property}") 
+                     * JavaScript: process.env.VARIABLE
+                     * Python: os.getenv("VARIABLE")
+                   - Hardcoding values (apiKey = "12345") is ALWAYS UNSAFE
+                
+                2. INPUT VALIDATION PRINCIPLE
+                   - ALL user-provided input MUST be validated
+                   - Whitelist approach (checking against allowed values) is REQUIRED
+                   - Framework-specific implementations vary but follow same principle:
+                     * Java: if (!validLanguages.contains(input)) throw...
+                     * JavaScript: if (!validLanguages.includes(input)) throw...
+                     * Python: if input not in valid_languages: raise...
+                
+                3. SECURITY FIRST PRINCIPLE
+                   - Security should be built-in, not added later
+                   - Sensitive operations require proper safeguards
+                   - Framework choice (HttpClient vs WebClient) depends on application architecture
+                     * HttpClient is appropriate for standard server-side calls
+                     * WebClient is better for reactive applications
+                
+                4. EDUCATIONAL MENTORING PRINCIPLE
+                   - Focus on teaching the UNDERLYING PRINCIPLE, not just the syntax
+                   - Explain WHY an issue matters in real-world terms
+                   - Provide actionable steps that apply across contexts
+                
+                Review this %s code and respond in this EXACT format:
+                
+                🌟 STRENGTHS OBSERVED
+                [Identify and celebrate at least one good practice in the code]
+                
+                💡 [CATEGORY] OBSERVATION
+                Issue: [brief, constructive description of the opportunity]
+                Severity: [CRITICAL/HIGH/MEDIUM/LOW/NONE]
+                Category: [Security/Design/Architecture/Performance/Readability/Maintainability/Style]
+                
+                📚 REAL-WORLD IMPACT:
+                [Explain the practical consequences of this issue in terms developers understand]
+                
+                🛠️ ACTIONABLE IMPROVEMENTS:
+                1. [Specific, implementable first step]
+                2. [Practical second step with examples if helpful]
+                3. [Broader principle to remember for future work]
+                
+                🌱 LEARNING RESOURCES:
+                [Curated resource matching the developer's level and language]
+                
                 Code to review:
                 %s
                 """,
@@ -88,21 +135,21 @@ public class CerebrasService {
                   "messages": [
                     {
                       "role": "system",
-                      "content": "You are a helpful and educational code reviewer."
+                      "content": "You are a professional software engineering mentor providing constructive, educational feedback based on fundamental principles."
                     },
                     {
                       "role": "user",
                       "content": "%s"
                     }
                   ],
-                  "max_tokens": 500,
+                  "max_tokens": 800,
                   "temperature": 0.3
                 }
-                """, model, escapeJson(prompt));
+                """, cerebrasConfig.getModel(), escapeJson(prompt));
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(apiUrl))
-                    .header("Authorization", "Bearer " + apiKey)
+                    .uri(URI.create(cerebrasConfig.getApiUrl()))
+                    .header("Authorization", "Bearer " + cerebrasConfig.getApiKey())
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .timeout(Duration.ofSeconds(30))

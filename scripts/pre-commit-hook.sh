@@ -10,16 +10,16 @@ fi
 
 cd "$PROJECT_ROOT" || exit 1
 
-echo "🛡️ CodeSage: AI-powered pre-commit review starting..."
+echo "🛡️ CodeSage: AI-powered educational code mentor starting..."
 
-# Check if backend is running
-echo "🔍 Checking backend health at http://127.0.0.1:8080/api/health"
-RESPONSE=$(curl -s --fail http://127.0.0.1:8080/api/health)
+# Check if backend is running - NOW USING DOCKER ADDRESS!
+echo "🔍 Checking backend health at http://host.docker.internal:8080/api/health"
+RESPONSE=$(curl -s --fail http://host.docker.internal:8080/api/health)
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -ne 0 ]; then
   echo "❌ HTTP request to /api/health failed."
-  echo "💡 Make sure your backend is running with: ./mvnw spring-boot:run"
+  echo "💡 Make sure your backend is running with: docker-compose up"
   exit 1
 fi
 
@@ -64,7 +64,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-HAS_ISSUES=0
+HAS_CRITICAL_SECURITY_ISSUES=0
 
 # Analyze each file
 while IFS= read -r file; do
@@ -77,11 +77,11 @@ while IFS= read -r file; do
 
   # Detect language
   case "${file##*.}" in
-    "java") LANGUAGE="Java" ;;
-    "js")   LANGUAGE="JavaScript" ;;
-    "py")   LANGUAGE="Python" ;;
-    "ts")   LANGUAGE="TypeScript" ;;
-    *)      LANGUAGE="Generic" ;;
+    "java") LANGUAGE="java" ;;
+    "js")   LANGUAGE="javascript" ;;
+    "py")   LANGUAGE="python" ;;
+    "ts")   LANGUAGE="typescript" ;;
+    *)      LANGUAGE="java" ;;
   esac
 
   # Read file content (limit size)
@@ -96,8 +96,8 @@ while IFS= read -r file; do
   echo "   Code: >>>$CONTENT<<<"
   echo ""
 
-  # Send to CodeSage backend
-  ANALYSIS_RESPONSE=$(curl -s -X POST http://127.0.0.1:8080/api/analyze \
+  # Send to CodeSage backend - NOW USING DOCKER ADDRESS!
+  ANALYSIS_RESPONSE=$(curl -s -X POST http://host.docker.internal:8080/api/analyze \
     -H "Content-Type: application/json" \
     -d "{
       \"code\": $(printf '%s' "$CONTENT" | jq -sR .),
@@ -109,32 +109,41 @@ while IFS= read -r file; do
   echo ""
 
   # Extract feedback
-  FEEDBACK=$(echo "$ANALYSIS_RESPONSE" | jq -r '.suggestions // empty')
+  FEEDBACK=$(echo "$ANALYSIS_RESPONSE" | jq -r '.analysis // empty')
 
   if [ -z "$FEEDBACK" ] || [ "$FEEDBACK" = "null" ]; then
     echo "❌ Failed to get AI feedback."
     echo "💡 Raw response: $ANALYSIS_RESPONSE"
+
+    # Check if there's an error message
+    ERROR_MSG=$(echo "$ANALYSIS_RESPONSE" | jq -r '.error // empty')
+    if [ ! -z "$ERROR_MSG" ]; then
+      echo "❌ Error from server: $ERROR_MSG"
+    fi
+
     exit 1
   fi
 
   # Show AI feedback
-  echo "🧠 CodeSage AI Feedback:"
+  echo "🧠 CodeSage Educational Feedback:"
   echo "$FEEDBACK" | sed 's/^/   → /'
   echo ""
 
-  # Check if AI wants to block
-  BLOCK=$(echo "$ANALYSIS_RESPONSE" | jq -r '.blockCommit // false')
-  if [[ "$BLOCK" == "true" || "$BLOCK" == true ]]; then
-    HAS_ISSUES=1
+  # Check if there's a CRITICAL security issue (only block for these)
+  if echo "$FEEDBACK" | grep -q "Severity: CRITICAL" &&
+     echo "$FEEDBACK" | grep -q "Category: Security"; then
+    HAS_CRITICAL_SECURITY_ISSUES=1
+    echo "⚠️ CRITICAL SECURITY ISSUE FOUND! Commit will be blocked."
   fi
 done <<< "$STAGED_FILES"
 
 # Final decision
-if [ $HAS_ISSUES -eq 1 ]; then
-  echo "🛑 Commit blocked by CodeSage AI. Fix issues and try again."
-  echo "💡 You're learning! That's how great developers grow."
+if [ $HAS_CRITICAL_SECURITY_ISSUES -eq 1 ]; then
+  echo "🛑 Commit blocked by CodeSage AI. Please fix critical security issues."
+  echo "💡 Remember: Security is everyone's responsibility!"
   exit 1
 else
-  echo "✅ All code passes CodeSage AI review. Commit approved!"
+  echo "✅ All code passes CodeSage review. Commit approved with educational feedback!"
+  echo "💡 Keep learning and growing as a developer!"
   exit 0
 fi

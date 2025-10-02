@@ -1,0 +1,18 @@
+
+version: '3.8'
+
+services:
+  codesage:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
+    volumes:
+      - .:/app
+    networks:
+      - codesage-network
+
+networks:
+  codesage-network:
+    driver: bridge
