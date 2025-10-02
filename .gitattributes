@@ -1,2 +1,19 @@
-/mvnw text eol=lf
-*.cmd text eol=crlf
+# Ensure shell scripts keep Unix line endings
+*.sh text eol=lf
+
+# Optional: lock down hook scripts
+.hooks/* binary
+hooks/* binary
+
+# Keep Java/JS/Python files as text (safe)
+*.java text eol=lf
+*.js   text eol=lf
+*.py   text eol=lf
+*.ts   text eol=lf
+
+# Config files
+*.json text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.xml  text eol=lf
+*.properties text eol=lf
