@@ -1,7 +1,7 @@
 public class TestBug {
     public static void main(String[] args) {
-        // Potential bug: unused variable
-        int secretValue = 12345;
-        System.out.println("Hello CodeSage!");
+        // Risky: hardcoded password
+        String password = "admin123";
+        System.out.println("Starting app...");
     }
 }
