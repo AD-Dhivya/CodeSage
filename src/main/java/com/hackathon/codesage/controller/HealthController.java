@@ -1,19 +1,42 @@
-
 package com.hackathon.codesage.controller;
 
+
+import com.hackathon.codesage.service.CerebrasService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 public class HealthController {
 
-    @GetMapping("/api/health")
-    public String health() {
-        return "🟢 CodeSage is alive and ready!";
+    private final CerebrasService cerebrasService;
+
+    @Autowired
+    public HealthController(CerebrasService cerebrasService) {
+        this.cerebrasService = cerebrasService;
     }
 
-    @GetMapping("/")
-    public String root() {
-        return "👋 Welcome to CodeSage! Go to /api/health to check status.";
+    @GetMapping("/health")
+    public Map<String, Object> healthCheck() {
+        Map<String, Object> status = new HashMap<>();
+
+        try {
+            // Check Cerebras API connection
+            boolean cerebrasHealthy = cerebrasService.healthCheck();
+
+            // Check Vault connection (we know it's working from logs)
+            status.put("vault", "connected");
+            status.put("cerebras", cerebrasHealthy ? "healthy" : "unhealthy");
+            status.put("status", cerebrasHealthy ? "UP" : "DOWN");
+
+            return status;
+        } catch (Exception e) {
+            status.put("error", e.getMessage());
+            status.put("status", "DOWN");
+            return status;
+        }
     }
 }

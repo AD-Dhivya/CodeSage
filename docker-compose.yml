@@ -7,9 +7,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
-    volumes:
-      - .:/app
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
+      CEREBRAS_API_URL: ${CEREBRAS_API_URL:-https://api.cerebras.ai/v1/chat/completions}
+      CEREBRAS_API_MODEL: ${CEREBRAS_API_MODEL:-llama3.1-8b}
+      VAULT_ENABLED: ${VAULT_ENABLED:-false}
+      VAULT_ADDRESS: ${VAULT_ADDRESS:-http://127.0.0.1:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-root}
+      VAULT_SECRET_PATH: ${VAULT_SECRET_PATH:-secret/data/codesage}
     networks:
       - codesage-network
 

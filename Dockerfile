@@ -1,21 +1,16 @@
 # Use OpenJDK 21 as base image
-FROM openjdk:21-jdk-slim
-
-# Set working directory inside container
-WORKDIR /app
-
-# Copy Maven project files
+FROM maven:3.9.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
 COPY pom.xml .
-COPY src ./src
+COPY .mvn .mvn
 COPY mvnw mvnw
 COPY mvnw.cmd mvnw.cmd
-COPY .mvn .mvn
+COPY src src
+RUN ./mvnw -q -DskipTests clean package
 
-# Build the project using Maven Wrapper
-RUN ./mvnw clean package -DskipTests
-
-# Expose port (default Spring Boot port)
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /workspace/target/CodeSage-1.0.0.jar app.jar
 EXPOSE 8080
-
-# Run the application
-ENTRYPOINT ["java", "-jar", "target/CodeSage-1.0.0.jar"]
+ENV JAVA_OPTS=""
+ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]

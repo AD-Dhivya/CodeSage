@@ -1,11 +1,16 @@
+
 package com.hackathon.codesage.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.hackathon.codesage.analyzer.PatternAnalyzer;
+import com.hackathon.codesage.model.AnalysisResponse;
+import com.hackathon.codesage.model.CerebrasRequest;
+import com.hackathon.codesage.model.CerebrasResponse;
+import com.hackathon.codesage.model.SecurityIssue;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hackathon.codesage.config.CerebrasConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -13,494 +18,249 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.Set;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class CerebrasService {
 
-    private static final Logger logger = LoggerFactory.getLogger(CerebrasService.class);
+    private static final Logger log = LoggerFactory.getLogger(CerebrasService.class);
 
-    private final CerebrasConfig cerebrasConfig;
-    private final HttpClient client;
-    private final ObjectMapper objectMapper;
+    @Value("${cerebras.api.url}")
+    private String apiUrl;
+
+    @Value("${cerebras.api.model}")
+    private String model;
+
+    @Value("${cerebras.api.max-tokens}")
+    private int maxTokens;
+
+    @Value("${cerebras.api.temperature}")
+    private double temperature;
 
     @Autowired
-    public CerebrasService(CerebrasConfig cerebrasConfig) {
-        this.cerebrasConfig = cerebrasConfig;
-        this.client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
+    private PromptLoader promptLoader;
+
+    @Autowired
+    private PatternAnalyzer patternAnalyzer;
+
+    @Autowired
+    private VaultSecretService vaultSecretService;
+
+    private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
+
+    private String apiKey;
+
+    @Value("${http.request.timeout.ms:15000}")
+    private int requestTimeoutMs;
+
+    @Autowired
+    public CerebrasService(VaultSecretService vaultSecretService) {
+        this.vaultSecretService = vaultSecretService;
+        this.httpClient = HttpClient.newHttpClient();
         this.objectMapper = new ObjectMapper();
+        this.apiKey = null; // defer loading until first use
+        log.info("🔑 CerebrasService initialized; API key will be loaded on first use");
     }
 
-    public String detectLanguage(String fileName) {
-        if (fileName == null) return "java";
-
-        String ext = fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
-
-        return switch (ext) {
-            case "java" -> "java";
-            case "js" -> "javascript";
-            case "py" -> "python";
-            case "ts" -> "typescript";
-            case "go" -> "go";
-            case "cpp", "h" -> "cpp";
-            case "c" -> "c";
-            case "cs" -> "csharp";
-            case "rb" -> "ruby";
-            case "php" -> "php";
-            case "rs" -> "rust";
-            default -> "java";
-        };
-    }
-
-    /**
-     * Multi-pass comprehensive code analysis
-     * Each pass focuses on a specific aspect for deeper, more actionable insights
-     */
-    public String analyzeCode(String code, String language, String fileName) {
-        logger.info("Starting comprehensive analysis for file: {} (language: {})", fileName, language);
-
-        // Validation
-        validateInputs(code, language);
-
-        StringBuilder fullAnalysis = new StringBuilder();
-        fullAnalysis.append("# 🔬 CodeSage Comprehensive Analysis\n");
-        fullAnalysis.append(String.format("**File:** `%s` | **Language:** %s\n\n", fileName, language));
-        fullAnalysis.append("---\n\n");
-
+    public AnalysisResponse analyzeCode(String code, String language, String fileName) {
         try {
-            // Pass 1: Security Analysis (CRITICAL - can block commits)
-            logger.info("Running security analysis pass...");
-            String securityAnalysis = analyzeWithPrompt(getSecurityPrompt(language, code));
-            fullAnalysis.append("## 🛡️ Security Analysis\n\n");
-            fullAnalysis.append(securityAnalysis).append("\n\n");
-            fullAnalysis.append("---\n\n");
-
-            // Pass 2: Design & Architecture
-            logger.info("Running design analysis pass...");
-            String designAnalysis = analyzeWithPrompt(getDesignPrompt(language, code));
-            fullAnalysis.append("## 🏗️ Design & Architecture\n\n");
-            fullAnalysis.append(designAnalysis).append("\n\n");
-            fullAnalysis.append("---\n\n");
-
-            // Pass 3: Performance Analysis
-            logger.info("Running performance analysis pass...");
-            String performanceAnalysis = analyzeWithPrompt(getPerformancePrompt(language, code));
-            fullAnalysis.append("## ⚡ Performance Insights\n\n");
-            fullAnalysis.append(performanceAnalysis).append("\n\n");
-            fullAnalysis.append("---\n\n");
-
-            // Pass 4: Readability & Maintainability
-            logger.info("Running readability analysis pass...");
-            String readabilityAnalysis = analyzeWithPrompt(getReadabilityPrompt(language, code));
-            fullAnalysis.append("## 📖 Readability & Maintainability\n\n");
-            fullAnalysis.append(readabilityAnalysis).append("\n\n");
-            fullAnalysis.append("---\n\n");
-
-            // Generate prioritized action items
-            fullAnalysis.append("## 🎯 Prioritized Action Plan\n\n");
-            fullAnalysis.append(generateActionItems(securityAnalysis, designAnalysis,
-                    performanceAnalysis, readabilityAnalysis));
-
-            logger.info("Analysis completed successfully");
-            return fullAnalysis.toString();
-
+            log.info("🔍 Starting code analysis for: {}", fileName);
+            String context = patternAnalyzer.analyzeContext(code);
+            log.info("📊 Context analysis: {}", context);
+            String fullPrompt = promptLoader.buildPrompt(code, language, context);
+            log.info("📝 Prompt built: {} characters", fullPrompt.length());
+            String analysisResult = callCerebrasApi(fullPrompt);
+            log.info("✅ Received analysis: {} characters", analysisResult.length());
+            List<SecurityIssue> issues = extractSecurityIssues(analysisResult);
+            return AnalysisResponse.builder()
+                    .summary(extractSummary(analysisResult, issues))
+                    .detailedAnalysis(analysisResult)
+                    .issues(issues)
+                    .status("SUCCESS")
+                    .timestamp(LocalDateTime.now())
+                    .fileName(fileName)
+                    .language(language)
+                    .build();
         } catch (Exception e) {
-            logger.error("Analysis failed for file: {}", fileName, e);
-            return "❌ Analysis failed: " + e.getMessage();
+            log.error("❌ Analysis failed for {}: {}", fileName, e.getMessage(), e);
+            return AnalysisResponse.builder()
+                    .summary("Analysis failed: " + e.getMessage())
+                    .detailedAnalysis("Error: " + e.getMessage())
+                    .issues(new ArrayList<>())
+                    .status("ERROR")
+                    .timestamp(LocalDateTime.now())
+                    .fileName(fileName)
+                    .language(language)
+                    .build();
         }
     }
 
-    /**
-     * Security-focused analysis prompt
-     * Identifies vulnerabilities that could lead to real-world exploits
-     */
-    private String getSecurityPrompt(String language, String code) {
-        return String.format("""
-            You are a security architect specializing in %s security. Perform a SECURITY-ONLY analysis.
-            
-            CRITICAL SECURITY CHECKS (These BLOCK commits):
-            1. Hardcoded credentials (passwords, API keys, tokens, secrets)
-            2. SQL injection vulnerabilities (unsafe query construction)
-            3. Command injection risks (unsafe system calls)
-            4. Path traversal vulnerabilities (unsafe file operations)
-            5. Insecure deserialization
-            6. Missing authentication/authorization checks
-            7. Cryptographic weaknesses (weak algorithms, hardcoded keys)
-            8. XXE (XML External Entity) vulnerabilities
-            
-            HIGH PRIORITY SECURITY ISSUES (Educational feedback):
-            - Missing input validation
-            - Improper error handling exposing sensitive info
-            - Insecure random number generation
-            - Race conditions in security-critical code
-            
-            For EACH security issue found, respond EXACTLY like this:
-            
-            🚨 SECURITY VULNERABILITY DETECTED
-            **Type:** [Specific vulnerability name - e.g., "Hardcoded API Credentials"]
-            **Severity:** [CRITICAL or HIGH]
-            **Location:** [Line numbers or specific code snippet]
-            **Category:** Security
-            
-            🎯 **REAL-WORLD ATTACK SCENARIO:**
-            [Describe concrete attack: "An attacker with access to [X] could [Y], leading to [Z]"]
-            [Include real CVE or breach example if applicable]
-            
-            🛡️ **SECURE SOLUTION:**
-            ```%s
-            [Show EXACT secure code replacement with inline comments]
-            ```
-            
-            📖 **SECURITY RESOURCES:**
-            - OWASP Reference: [Specific OWASP page]
-            - %s-specific security guide: [Relevant link]
-            
-            If NO security issues found:
-            ✅ **NO SECURITY VULNERABILITIES DETECTED**
-            Great job following security best practices!
-            
-            Code to analyze:
-            ```%s
-            %s
-            ```
-            """, language, language, language, language, code);
+    private String callCerebrasApi(String prompt) throws Exception {
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            try {
+                apiKey = vaultSecretService.getCerebrasApiKey();
+            } catch (Exception e) {
+                throw new IllegalStateException("CEREBRAS_API_KEY is not set and could not be loaded", e);
+            }
+        }
+        CerebrasRequest cerebrasRequest = CerebrasRequest.builder()
+                .model(model)
+                .temperature(temperature)
+                .max_tokens(maxTokens)
+                .messages(List.of(
+                        CerebrasRequest.Message.builder()
+                                .role("system")
+                                .content("You are a senior code mentor and application security expert.\n\nGoals:\n- Teach developers as you go (concise mentoring).\n- Identify security, correctness, performance, and readability issues.\n- Provide step-by-step fixes, with before/after code where helpful.\n- Propose refactoring and testing strategies.\n- Keep answers structured and actionable, optimized for skimming.\n\nConstraints:\n- Use the exact SECURITY section markers if a vulnerability is found so tools can parse.\n- Prefer minimal, incremental changes; highlight trade-offs.\n- Be definitive when possible, and note assumptions explicitly.")
+                                .build(),
+                        CerebrasRequest.Message.builder()
+                                .role("user")
+                                .content(prompt)
+                                .build()
+                ))
+                .build();
+        String requestBody = objectMapper.writeValueAsString(cerebrasRequest);
+        log.debug("📤 Request body: {}...", requestBody.substring(0, Math.min(200, requestBody.length())));
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(apiUrl))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .timeout(Duration.ofMillis(Math.max(1000, requestTimeoutMs)))
+                .build();
+        log.info("🌐 Calling Cerebras API: {}", apiUrl);
+        HttpResponse<String> httpResponse = httpClient.send(
+                request,
+                HttpResponse.BodyHandlers.ofString()
+        );
+        if (httpResponse.statusCode() != 200) {
+            log.error("❌ Cerebras API error: Status {}, Body: {}",
+                    httpResponse.statusCode(),
+                    httpResponse.body());
+            throw new RuntimeException(
+                    "Cerebras API error: " + httpResponse.statusCode() + " - " + httpResponse.body()
+            );
+        }
+        log.debug("📥 Response status: {}", httpResponse.statusCode());
+        CerebrasResponse cerebrasResponse = objectMapper.readValue(
+                httpResponse.body(),
+                CerebrasResponse.class
+        );
+        if (cerebrasResponse.getChoices() == null || cerebrasResponse.getChoices().isEmpty()) {
+            throw new RuntimeException("Empty response from Cerebras API");
+        }
+        String content = cerebrasResponse.getChoices().get(0).getMessage().getContent();
+        if (cerebrasResponse.getUsage() != null) {
+            log.info("📊 Token usage - Prompt: {}, Completion: {}, Total: {}",
+                    cerebrasResponse.getUsage().getPrompt_tokens(),
+                    cerebrasResponse.getUsage().getCompletion_tokens(),
+                    cerebrasResponse.getUsage().getTotal_tokens());
+        }
+        return content;
     }
 
-    /**
-     * Design and architecture analysis prompt
-     * Focuses on SOLID principles, design patterns, and code smells
-     */
-    private String getDesignPrompt(String language, String code) {
-        return String.format("""
-            You are a software architect specializing in %s design patterns. Perform DESIGN-ONLY analysis.
-            
-            ANALYZE FOR:
-            1. SOLID Principles violations
-               - Single Responsibility: Does class/function do too much?
-               - Open/Closed: Is it extensible without modification?
-               - Liskov Substitution: Can subclasses replace parents safely?
-               - Interface Segregation: Are interfaces too fat?
-               - Dependency Inversion: Depend on abstractions, not concretions?
-            
-            2. Code Smells
-               - God Class (class doing too much)
-               - Long Method (function too complex)
-               - Feature Envy (method using another class's data)
-               - Shotgun Surgery (one change affects many classes)
-               - Duplicate Code (DRY violations)
-            
-            3. Missing Design Patterns
-               - Could Strategy pattern help?
-               - Would Factory pattern improve creation?
-               - Is Builder pattern needed for complex objects?
-               - Would Observer pattern decouple components?
-            
-            For EACH design issue, respond EXACTLY like this:
-            
-            🏗️ DESIGN OPPORTUNITY
-            **Pattern/Principle:** [Specific SOLID principle or code smell]
-            **Severity:** [HIGH/MEDIUM/LOW]
-            **Category:** Design
-            
-            🤔 **WHY THIS MATTERS:**
-            - Maintenance Cost: [How this affects future changes]
-            - Testing Difficulty: [How this complicates testing]
-            - Team Impact: [How this affects other developers]
-            
-            ✨ **REFACTORED APPROACH:**
-            ```%s
-            [Show improved design with clear structure]
-            ```
-            
-            💡 **DESIGN PATTERN TO EXPLORE:**
-            [Suggest specific pattern with brief explanation]
-            [Link to pattern documentation for %s]
-            
-            If code follows good design practices:
-            ✅ **EXCELLENT DESIGN OBSERVED**
-            [Highlight what's done well]
-            
-            Code to analyze:
-            ```%s
-            %s
-            ```
-            """, language, language, language, language, code);
-    }
+    private List<SecurityIssue> extractSecurityIssues(String analysis) {
 
-    /**
-     * Performance analysis prompt
-     * Identifies algorithmic inefficiencies and resource usage issues
-     */
-    private String getPerformancePrompt(String language, String code) {
-        return String.format("""
-            You are a performance engineer specializing in %s optimization. Perform PERFORMANCE-ONLY analysis.
-            
-            CHECK FOR:
-            1. Algorithm Complexity
-               - O(n²) or worse where O(n log n) or O(n) exists
-               - Nested loops that could be flattened
-               - Recursive calls without memoization
-            
-            2. Database/IO Issues
-               - N+1 query problems
-               - Missing batch operations
-               - Unnecessary database calls in loops
-               - Blocking I/O in async contexts
-            
-            3. Memory Issues
-               - Memory leaks (unclosed resources)
-               - Excessive object creation
-               - Large collections loaded into memory
-               - String concatenation in loops
-            
-            4. Caching Opportunities
-               - Repeated expensive calculations
-               - Cacheable external API calls
-               - Static data fetched repeatedly
-            
-            For EACH performance issue, respond EXACTLY like this:
-            
-            ⚡ PERFORMANCE OPPORTUNITY
-            **Issue:** [Specific bottleneck]
-            **Severity:** [HIGH/MEDIUM/LOW]
-            **Category:** Performance
-            
-            📊 **THE NUMBERS:**
-            - Current Complexity: O([complexity]) - [What this means in plain English]
-            - Optimized Complexity: O([complexity]) - [Expected improvement]
-            - Real-world Impact: [e.g., "100ms vs 10ms for 1000 items"]
-            
-            🚄 **OPTIMIZED SOLUTION:**
-            ```%s
-            [Show faster algorithm/approach with performance comments]
-            ```
-            
-            🔬 **HOW TO MEASURE:**
-            [Suggest specific profiling technique for %s]
-            
-            If performance is good:
-            ✅ **EFFICIENT IMPLEMENTATION**
-            [Highlight what's optimized well]
-            
-            Code to analyze:
-            ```%s
-            %s
-            ```
-            """, language, language, language, language, code);
-    }
+        List<SecurityIssue> issues = new ArrayList<>();
 
-    /**
-     * Readability and maintainability analysis prompt
-     * Focuses on clean code principles and developer experience
-     */
-    private String getReadabilityPrompt(String language, String code) {
-        return String.format("""
-            You are a clean code expert specializing in %s. Perform READABILITY-ONLY analysis.
-            
-            EVALUATE:
-            1. Naming Conventions
-               - Are names intention-revealing?
-               - Do they follow %s conventions?
-               - Are abbreviations avoided?
-               - Do boolean variables sound like questions?
-            
-            2. Function Quality
-               - Is each function doing ONE thing?
-               - Are functions short (< 20 lines ideal)?
-               - Do they have clear inputs/outputs?
-               - Are side effects minimized?
-            
-            3. Code Comments
-               - Do comments explain "WHY" not "WHAT"?
-               - Are complex algorithms documented?
-               - Are TODOs tracked?
-               - Is there outdated/misleading documentation?
-            
-            4. Code Structure
-               - Is indentation consistent?
-               - Are there magic numbers/strings?
-               - Is code DRY (Don't Repeat Yourself)?
-               - Are error messages helpful?
-            
-            For EACH readability issue, respond EXACTLY like this:
-            
-            📖 READABILITY INSIGHT
-            **Issue:** [Specific clarity problem]
-            **Severity:** [MEDIUM/LOW]
-            **Category:** Readability
-            
-            🧠 **COGNITIVE LOAD:**
-            - Current: [How difficult code is to understand now]
-            - Improved: [How much clearer it could be]
-            
-            ✍️ **CLEANER VERSION:**
-            ```%s
-            [Show refactored code with better names/structure/comments]
-            ```
-            
-            💬 **CLEAN CODE PRINCIPLE:**
-            [Share specific Uncle Bob or language-specific best practice]
-            
-            If readability is excellent:
-            ✅ **HIGHLY READABLE CODE**
-            [Highlight what makes it clear]
-            
-            Code to analyze:
-            ```%s
-            %s
-            ```
-            """, language, language, language, language, code);
-    }
+        Pattern pattern = Pattern.compile("🚨 SECURITY VULNERABILITY DETECTED.*?(?=🚨|✅|$)", Pattern.DOTALL);
 
-    /**
-     * Execute a single analysis pass with the given prompt
-     */
-    private String analyzeWithPrompt(String prompt) {
-        try {
-            String requestBody = String.format("""
-                {
-                  "model": "%s",
-                  "messages": [
-                    {
-                      "role": "system",
-                      "content": "You are a professional code analysis expert. Provide specific, actionable insights. Always use the exact format requested."
-                    },
-                    {
-                      "role": "user",
-                      "content": "%s"
-                    }
-                  ],
-                  "max_tokens": 1000,
-                  "temperature": 0.2
-                }
-                """, cerebrasConfig.getModel(), escapeJson(prompt));
+        Matcher matcher = pattern.matcher(analysis);
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(cerebrasConfig.getApiUrl()))
-                    .header("Authorization", "Bearer " + cerebrasConfig.getApiKey())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .timeout(Duration.ofSeconds(30))
+        while (matcher.find()) {
+
+            String block = matcher.group();
+
+            String type = extractField(block, "\\*\\*Type:\\*\\*\\s*(.+?)\\n");
+            String severity = extractField(block, "\\*\\*Severity:\\*\\*\\s*(\\w+)");
+            String location = extractField(block, "\\*\\*Location:\\*\\*\\s*(.+?)\\n");
+            String description = extractField(block, "\\*\\*ATTACK SCENARIO:\\*\\*\\s*(.+?)(?=\\*\\*|$)");
+            String recommendation = extractSecureFix(block);
+
+            SecurityIssue issue = SecurityIssue.builder()
+                    .type(type)
+                    .severity(severity)
+                    .location(location)
+                    .description(description)
+                    .recommendation(recommendation)
+                    .category("Security")
                     .build();
 
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            issues.add(issue);
 
-            if (response.statusCode() == 200) {
-                return parseResponse(response.body());
+            log.info("🔴 Extracted issue: {} ({})", issue.getType(), issue.getSeverity());
+
+        }
+
+        return issues;
+    }
+
+    private String extractField(String text, String regex) {
+        Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(text);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+        return "Not specified";
+    }
+
+    private String extractSecureFix(String block) {
+        // Prefer fenced code block after **SECURE FIX:**
+        Pattern codeBlock = Pattern.compile("\\*\\*SECURE FIX:\\*\\*[\\s\\S]*?```[\\s\\S]*?```", Pattern.DOTALL);
+        Matcher m = codeBlock.matcher(block);
+        if (m.find()) {
+            String section = m.group();
+            // Extract inner code fence contents
+            Pattern inner = Pattern.compile("```[a-zA-Z0-9_-]*\\n([\\s\\S]*?)```", Pattern.DOTALL);
+            Matcher innerM = inner.matcher(section);
+            if (innerM.find()) {
+                return innerM.group(1).trim();
+            }
+            return section.trim();
+        }
+        // Fallback: capture paragraph after **SECURE FIX:** up to next ** or end
+        String fallback = extractField(block, "\\*\\*SECURE FIX:\\*\\*\\s*([\\s\\S]*?)(?=\\n\\*\\*|$)");
+        return fallback;
+    }
+
+    private String extractSummary(String analysis, List<SecurityIssue> issues) {
+        if (issues.isEmpty()) {
+            if (analysis.contains("✅ NO SECURITY VULNERABILITIES DETECTED")) {
+                return "✅ PASS: No security vulnerabilities detected";
             } else {
-                logger.error("API returned status {}: {}", response.statusCode(), response.body());
-                return "⚠️ Analysis pass incomplete (API status: " + response.statusCode() + ")";
+                return "✅ Analysis completed - No critical issues found";
             }
-
-        } catch (Exception e) {
-            logger.error("Analysis pass failed", e);
-            return "⚠️ Analysis pass failed: " + e.getMessage();
+        }
+        long criticalCount = issues.stream()
+                .filter(i -> "CRITICAL" .equalsIgnoreCase(i.getSeverity()))
+                .count();
+        long highCount = issues.stream()
+                .filter(i -> "HIGH" .equalsIgnoreCase(i.getSeverity()))
+                .count();
+        if (criticalCount > 0) {
+            return String.format("🚨 CRITICAL: %d critical and %d high severity issues found", criticalCount, highCount);
+        } else if (highCount > 0) {
+            return String.format("⚠️ WARNING: %d high severity issues found", highCount);
+        } else {
+            return String.format("ℹ️ INFO: %d issues found", issues.size());
         }
     }
 
-    /**
-     * Generate prioritized action items from all analysis passes
-     */
-    private String generateActionItems(String security, String design, String performance, String readability) {
-        StringBuilder items = new StringBuilder();
-
-        // Critical Security Issues (BLOCKS COMMIT)
-        if (security.contains("Severity: CRITICAL") || security.contains("Severity:** CRITICAL")) {
-            items.append("### 🚨 CRITICAL - FIX IMMEDIATELY (BLOCKS COMMIT)\n\n");
-            items.append("- **Security vulnerabilities detected** - Review security section above\n");
-            items.append("- These must be resolved before commit can proceed\n\n");
-        }
-
-        // High Priority Issues
-        boolean hasHighPriority = security.contains("Severity: HIGH") ||
-                design.contains("Severity: HIGH") ||
-                performance.contains("Severity: HIGH");
-
-        if (hasHighPriority) {
-            items.append("### ⚠️ HIGH PRIORITY - Address Soon\n\n");
-            if (security.contains("Severity: HIGH")) {
-                items.append("- **Security:** Review and fix high-priority security issues\n");
-            }
-            if (design.contains("Severity: HIGH")) {
-                items.append("- **Design:** Refactor to address design concerns\n");
-            }
-            if (performance.contains("Severity: HIGH")) {
-                items.append("- **Performance:** Optimize identified bottlenecks\n");
-            }
-            items.append("\n");
-        }
-
-        // Medium/Low Priority (Learning Opportunities)
-        items.append("### 📚 LEARNING OPPORTUNITIES\n\n");
-        items.append("1. Review suggested design patterns and best practices\n");
-        items.append("2. Explore performance optimization techniques\n");
-        items.append("3. Apply clean code principles for better readability\n");
-        items.append("4. Check out the linked resources for deeper understanding\n\n");
-
-        // Positive Reinforcement
-        if (security.contains("NO SECURITY VULNERABILITIES") ||
-                security.contains("EXCELLENT") ||
-                design.contains("EXCELLENT") ||
-                performance.contains("EFFICIENT") ||
-                readability.contains("HIGHLY READABLE")) {
-            items.append("### 🌟 STRENGTHS IDENTIFIED\n\n");
-            items.append("Your code demonstrates solid practices in several areas!\n");
-            items.append("Keep up the good work and continue learning.\n");
-        }
-
-        return items.toString();
-    }
-
-    /**
-     * Validate inputs before processing
-     */
-    private void validateInputs(String code, String language) {
-        Set<String> validLanguages = Set.of("java", "javascript", "python", "typescript",
-                "go", "cpp", "c", "csharp", "ruby", "php", "rust");
-
-        if (language == null || language.trim().isEmpty()) {
-            throw new IllegalArgumentException("Language parameter is required");
-        }
-
-        if (!validLanguages.contains(language.toLowerCase())) {
-            throw new IllegalArgumentException("Invalid programming language: " + language +
-                    ". Supported: " + validLanguages);
-        }
-
-        if (code == null || code.trim().isEmpty()) {
-            throw new IllegalArgumentException("Code cannot be empty or null");
-        }
-
-        if (code.length() > 50000) {
-            throw new IllegalArgumentException("Code exceeds maximum size of 50KB");
-        }
-    }
-
-    private String escapeJson(String s) {
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-    }
-
-    private String parseResponse(String body) {
+    public boolean healthCheck() {
         try {
-            JsonNode root = objectMapper.readTree(body);
-            JsonNode contentNode = root.path("choices")
-                    .get(0)
-                    .path("message")
-                    .path("content");
-
-            if (contentNode.isMissingNode() || contentNode.asText().isEmpty()) {
-                return "⚠️ AI returned empty analysis. Please check your input.";
-            }
-            return contentNode.asText();
+            log.info("🏥 Performing Cerebras API health check...");
+            String testPrompt = "Respond with 'OK' if you can read this message.";
+            String response = callCerebrasApi(testPrompt);
+            boolean isHealthy = response != null && !response.trim().isEmpty();
+            log.info("🏥 Health check result: {}", isHealthy ? "✅ HEALTHY" : "❌ UNHEALTHY");
+            return isHealthy;
         } catch (Exception e) {
-            logger.error("Failed to parse API response", e);
-            return "❌ Response parsing failed: " + e.getMessage();
+            log.error("🏥 Health check failed: {}", e.getMessage());
+            return false;
         }
     }
 }

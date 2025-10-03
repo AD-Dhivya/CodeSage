@@ -1,0 +1,112 @@
+LEARN FROM THESE EXAMPLES:
+
+═══════════════════════════════════════════════════════════
+✅ SAFE CODE EXAMPLES (DO NOT FLAG AS SECURITY ISSUES)
+═══════════════════════════════════════════════════════════
+
+EXAMPLE 1: HTTP Client Usage
+Code: HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+Analysis: ✅ NO SECURITY ISSUES
+Reason: Standard HTTP client library usage. NOT SQL injection. NOT a security risk.
+
+EXAMPLE 2: External Configuration (Spring)
+Code: @Value("${api.key}") private String apiKey;
+Analysis: ✅ NO SECURITY ISSUES
+Reason: Uses external configuration from application.properties. This is CORRECT and SECURE.
+
+EXAMPLE 3: Configuration Object
+Code: private String apiKey = cerebrasConfig.getApiKey();
+Analysis: ✅ NO SECURITY ISSUES
+Reason: Retrieving from config object is secure. Value comes from external source, not hardcoded.
+
+EXAMPLE 4: Autowired Configuration
+Code: @Autowired private CerebrasConfig config;
+Analysis: ✅ NO SECURITY ISSUES
+Reason: Spring dependency injection for configuration is a secure pattern.
+
+EXAMPLE 5: Input Validation with Whitelist
+Code: if (!validLanguages.contains(language)) throw new IllegalArgumentException("Invalid language");
+Analysis: ✅ NO SECURITY ISSUES
+Reason: GOOD security practice - whitelist validation prevents injection attacks.
+
+EXAMPLE 6: JSON Handling with ObjectMapper
+Code: ObjectMapper mapper = new ObjectMapper(); JsonNode node = mapper.readTree(json);
+Analysis: ✅ NO SECURITY ISSUES
+Reason: Jackson ObjectMapper for JSON parsing is standard practice. NOT a vulnerability.
+
+EXAMPLE 7: JSON String Building with Escaping
+Code: String json = "{\"key\":\"" + escapeJson(value) + "\"}";
+Analysis: ✅ NO SECURITY ISSUES
+Reason: String concatenation for JSON is acceptable when values are properly escaped. The escapeJson() method prevents injection.
+
+EXAMPLE 8: HTTP Request Building
+Code: HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).header("Authorization", "Bearer " + token).build();
+Analysis: ✅ NO SECURITY ISSUES
+Reason: Building HTTP requests with HttpRequest API is standard Java. This is NOT SQL injection.
+
+EXAMPLE 9: Environment Variables
+Code: String apiKey = System.getenv("API_KEY");
+Analysis: ✅ NO SECURITY ISSUES
+Reason: Loading from environment variables is a secure configuration pattern.
+
+EXAMPLE 10: Properties File
+Code: String password = properties.getProperty("db.password");
+Analysis: ✅ NO SECURITY ISSUES
+Reason: Loading from properties file (not in git) is secure configuration management.
+
+═══════════════════════════════════════════════════════════
+🚨 DANGEROUS CODE EXAMPLES (FLAG AS CRITICAL)
+═══════════════════════════════════════════════════════════
+
+EXAMPLE 11: Hardcoded API Key
+Code: private String apiKey = "sk-abc123xyz456def789";
+Analysis: 🚨 CRITICAL SECURITY ISSUE
+Issue: Hardcoded API Key
+Reason: API key is directly embedded in source code. Anyone with access to the repository or compiled code can extract this credential.
+
+EXAMPLE 12: Hardcoded Password
+Code: String password = "admin123";
+Analysis: 🚨 CRITICAL SECURITY ISSUE
+Issue: Hardcoded Password
+Reason: Password is hardcoded in source code. This is a severe security vulnerability.
+
+EXAMPLE 13: SQL Injection (SELECT)
+Code: String query = "SELECT * FROM users WHERE username='" + username + "'";
+Analysis: 🚨 CRITICAL SECURITY ISSUE
+Issue: SQL Injection Vulnerability
+Reason: User input is directly concatenated into SQL query without parameterization. Attacker can inject malicious SQL.
+
+EXAMPLE 14: SQL Injection (UPDATE)
+Code: statement.executeUpdate("UPDATE users SET role='admin' WHERE id=" + userId);
+Analysis: 🚨 CRITICAL SECURITY ISSUE
+Issue: SQL Injection Vulnerability
+Reason: SQL query built with string concatenation. Should use PreparedStatement with placeholders.
+
+EXAMPLE 15: Command Injection
+Code: Runtime.getRuntime().exec("rm -rf " + userProvidedPath);
+Analysis: 🚨 CRITICAL SECURITY ISSUE
+Issue: Command Injection Vulnerability
+Reason: User input directly used in system command. Attacker can inject malicious commands.
+
+EXAMPLE 16: Path Traversal
+Code: File file = new File("/uploads/" + userFileName);
+Analysis: 🚨 CRITICAL SECURITY ISSUE
+Issue: Path Traversal Vulnerability
+Reason: User-controlled filename without validation. Attacker could use "../../../etc/passwd" to access sensitive files.
+
+═══════════════════════════════════════════════════════════
+KEY RULES TO REMEMBER:
+═══════════════════════════════════════════════════════════
+
+DO NOT FLAG AS SECURITY ISSUES:
+✅ HttpClient, HttpRequest, fetch(), axios - These are HTTP libraries, NOT SQL injection
+✅ @Value("${property}"), config.get(), getenv() - These are SECURE external configuration
+✅ ObjectMapper, JSON.parse(), json.loads() - These are JSON libraries, NOT vulnerabilities
+✅ String escaping for JSON/HTTP - This is CORRECT security practice
+✅ Input validation with whitelist - This is GOOD security practice
+
+ONLY FLAG AS CRITICAL:
+🚨 Hardcoded credential VALUES visible in code (apiKey = "sk-...", password = "admin123")
+🚨 SQL query building with concatenation ("SELECT * FROM ... " + input)
+🚨 Command execution with user input (Runtime.exec() or ProcessBuilder with user data)
+🚨 File operations with unvalidated user input (new File(userInput) without validation)
