@@ -1,16 +1,41 @@
-# Use OpenJDK 21 as base image
-FROM maven:3.9.9-eclipse-temurin-21 AS build
-WORKDIR /workspace
-COPY pom.xml .
-COPY .mvn .mvn
-COPY mvnw mvnw
-COPY mvnw.cmd mvnw.cmd
-COPY src src
-RUN ./mvnw -q -DskipTests clean package
 
-FROM eclipse-temurin:21-jre
+# Use a slim, stable OpenJDK 21 image
+FROM openjdk:21-jdk-slim
+
+# Metadata for judges
+LABEL maintainer="you"
+LABEL org.opencontainers.image.title="CodeSage - AI Code Mentor"
+LABEL org.opencontainers.image.description="Java 21 + Spring Boot + Cerebras AI"
+LABEL org.opencontainers.image.version="1.0.0"
+
+# Set working directory
 WORKDIR /app
-COPY --from=build /workspace/target/CodeSage-1.0.0.jar app.jar
+
+# Install curl for health checks and debugging
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy Maven wrapper and POM first (for better layer caching)
+COPY mvnw ./
+COPY .mvn .mvn/
+COPY pom.xml ./
+
+# Make mvnw executable
+RUN chmod +x ./mvnw
+
+# Copy source code
+COPY src ./src
+
+# Build the project (batch mode for Docker)
+# Skip tests to speed up build
+RUN ./mvnw clean package -DskipTests -B
+
+# Optional: Extract layers (improves rebuild speed in future)
+# RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../CodeSage-1.0.0.jar)
+
+# Expose port 8080 (Spring Boot default)
 EXPOSE 8080
-ENV JAVA_OPTS=""
-ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]
+
+# Run the application
+ENTRYPOINT ["java", "-jar", "target/CodeSage-1.0.0.jar"]

@@ -1,4 +1,10 @@
+
 #!/usr/bin/env bash
+
+# ═══════════════════════════════════════════════════════════
+# 🛡️ CodeSage: AI-Powered Security Mentor
+# Pre-Commit Hook - Stops security issues before they commit
+# ═══════════════════════════════════════════════════════════
 
 # Get project root
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
@@ -8,6 +14,19 @@ if [ -z "$PROJECT_ROOT" ]; then
 fi
 
 cd "$PROJECT_ROOT" || exit 1
+
+# Check for bypass file (for development)
+BYPASS_FILE="$PROJECT_ROOT/.codesage-bypass"
+if [ -f "$BYPASS_FILE" ]; then
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "⚠️  CodeSage bypass active (.codesage-bypass detected)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "💡 To disable bypass: rm .codesage-bypass"
+  echo "✅ Proceeding with commit..."
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  exit 0
+fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🛡️  CodeSage: AI-Powered Security Mentor"
@@ -35,6 +54,8 @@ if [ $PING_EXIT -ne 0 ] || [ -z "$PING_RESPONSE" ]; then
   echo ""
   echo "   cd E:\\Hackathon\\CodeSage"
   echo "   .\\mvnw.cmd spring-boot:run"
+  echo ""
+  echo "💡 Pro tip: Use 'touch .codesage-bypass' to skip this check during development"
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "🛑 COMMIT BLOCKED: Backend must be running for security analysis"
@@ -67,6 +88,7 @@ STAGED_FILES=$(git diff --cached --name-only --diff-filter=d | grep -E '\.(java|
 if [ -z "$STAGED_FILES" ]; then
   echo "ℹ️  No code files staged for commit"
   echo "✅ Commit allowed (no code to analyze)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   exit 0
 fi
 
@@ -88,6 +110,8 @@ if ! command -v jq >/dev/null 2>&1; then
   echo ""
   echo "   Mac: brew install jq"
   echo "   Linux: sudo apt-get install jq"
+  echo ""
+  echo "💡 Bypass tip: Create .codesage-bypass file to skip analysis"
   echo ""
   echo "🛑 COMMIT BLOCKED: Install jq to enable security analysis"
   exit 1
@@ -157,12 +181,16 @@ while IFS= read -r file; do
   # Check if request failed
   if [ $CURL_EXIT -ne 0 ]; then
     echo "❌ Failed to connect to backend (curl exit code: $CURL_EXIT)"
+    echo ""
+    echo "💡 To bypass: touch .codesage-bypass"
     echo "🛑 COMMIT BLOCKED: Cannot analyze code without backend"
     exit 1
   fi
 
   if [ -z "$ANALYSIS_RESPONSE" ]; then
     echo "❌ Empty response from backend"
+    echo ""
+    echo "💡 To bypass: touch .codesage-bypass"
     echo "🛑 COMMIT BLOCKED: Backend error"
     exit 1
   fi
@@ -174,6 +202,7 @@ while IFS= read -r file; do
     ERROR_MSG=$(echo "$ANALYSIS_RESPONSE" | jq -r '.error // "Unknown error"')
     echo "❌ Analysis failed: $ERROR_MSG"
     echo ""
+    echo "💡 To bypass: touch .codesage-bypass"
     echo "🛑 COMMIT BLOCKED: Analysis error"
     exit 1
   fi
@@ -272,6 +301,8 @@ if [ $HAS_CRITICAL_ISSUES -eq 1 ]; then
   echo ""
   echo "🔒 Security is not optional - it protects users and data."
   echo ""
+  echo "💡 To bypass (for development): touch .codesage-bypass"
+  echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   exit 1
 
@@ -286,6 +317,8 @@ elif [ $HAS_HIGH_ISSUES -eq 1 ]; then
   echo "   Review the recommendations carefully."
   echo ""
   echo "✅ Proceeding with commit..."
+  echo ""
+  echo "💡 To bypass completely: touch .codesage-bypass"
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   exit 0

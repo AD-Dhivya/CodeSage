@@ -1,4 +1,3 @@
-
 package com.hackathon.codesage.service;
 
 import com.hackathon.codesage.analyzer.PatternAnalyzer;
@@ -41,42 +40,48 @@ public class CerebrasService {
     @Value("${cerebras.api.temperature}")
     private double temperature;
 
+    @Value("${CEREBRAS_API_KEY}")
+    private String apiKey;
+
     @Autowired
     private PromptLoader promptLoader;
 
     @Autowired
     private PatternAnalyzer patternAnalyzer;
 
-    @Autowired
-    private VaultSecretService vaultSecretService;
-
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
-
-    private String apiKey;
 
     @Value("${http.request.timeout.ms:15000}")
     private int requestTimeoutMs;
 
     @Autowired
-    public CerebrasService(VaultSecretService vaultSecretService) {
-        this.vaultSecretService = vaultSecretService;
+    public CerebrasService() {
         this.httpClient = HttpClient.newHttpClient();
         this.objectMapper = new ObjectMapper();
-        this.apiKey = null; // defer loading until first use
-        log.info("🔑 CerebrasService initialized; API key will be loaded on first use");
+        log.info("🔑 CerebrasService initialized - API key loaded from .env");
     }
 
     public AnalysisResponse analyzeCode(String code, String language, String fileName) {
         try {
             log.info("🔍 Starting code analysis for: {}", fileName);
+
+            // Validate API key first
+            if (apiKey == null || apiKey.trim().isEmpty()) {
+                throw new IllegalStateException("CEREBRAS_API_KEY not found in .env file");
+            }
+
             String context = patternAnalyzer.analyzeContext(code);
             log.info("📊 Context analysis: {}", context);
+
             String fullPrompt = promptLoader.buildPrompt(code, language, context);
             log.info("📝 Prompt built: {} characters", fullPrompt.length());
+
             String analysisResult = callCerebrasApi(fullPrompt);
             log.info("✅ Received analysis: {} characters", analysisResult.length());
+
             List<SecurityIssue> issues = extractSecurityIssues(analysisResult);
+
             return AnalysisResponse.builder()
                     .summary(extractSummary(analysisResult, issues))
                     .detailedAnalysis(analysisResult)
@@ -101,13 +106,11 @@ public class CerebrasService {
     }
 
     private String callCerebrasApi(String prompt) throws Exception {
+        // Validate API key
         if (apiKey == null || apiKey.trim().isEmpty()) {
-            try {
-                apiKey = vaultSecretService.getCerebrasApiKey();
-            } catch (Exception e) {
-                throw new IllegalStateException("CEREBRAS_API_KEY is not set and could not be loaded", e);
-            }
+            throw new IllegalStateException("CEREBRAS_API_KEY is not set in .env file");
         }
+
         CerebrasRequest cerebrasRequest = CerebrasRequest.builder()
                 .model(model)
                 .temperature(temperature)
@@ -123,8 +126,10 @@ public class CerebrasService {
                                 .build()
                 ))
                 .build();
+
         String requestBody = objectMapper.writeValueAsString(cerebrasRequest);
         log.debug("📤 Request body: {}...", requestBody.substring(0, Math.min(200, requestBody.length())));
+
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(apiUrl))
                 .header("Content-Type", "application/json")
@@ -132,47 +137,52 @@ public class CerebrasService {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .timeout(Duration.ofMillis(Math.max(1000, requestTimeoutMs)))
                 .build();
+
         log.info("🌐 Calling Cerebras API: {}", apiUrl);
+
         HttpResponse<String> httpResponse = httpClient.send(
                 request,
                 HttpResponse.BodyHandlers.ofString()
         );
+
         if (httpResponse.statusCode() != 200) {
             log.error("❌ Cerebras API error: Status {}, Body: {}",
                     httpResponse.statusCode(),
                     httpResponse.body());
             throw new RuntimeException(
-                    "Cerebras API error: " + httpResponse.statusCode() + " - " + httpResponse.body()
-            );
+                    "Cerebras API error: " + httpResponse.statusCode() + " - " + httpResponse.body());
         }
+
         log.debug("📥 Response status: {}", httpResponse.statusCode());
+
         CerebrasResponse cerebrasResponse = objectMapper.readValue(
                 httpResponse.body(),
                 CerebrasResponse.class
         );
+
         if (cerebrasResponse.getChoices() == null || cerebrasResponse.getChoices().isEmpty()) {
             throw new RuntimeException("Empty response from Cerebras API");
         }
+
         String content = cerebrasResponse.getChoices().get(0).getMessage().getContent();
+
         if (cerebrasResponse.getUsage() != null) {
             log.info("📊 Token usage - Prompt: {}, Completion: {}, Total: {}",
                     cerebrasResponse.getUsage().getPrompt_tokens(),
                     cerebrasResponse.getUsage().getCompletion_tokens(),
                     cerebrasResponse.getUsage().getTotal_tokens());
         }
+
         return content;
     }
 
     private List<SecurityIssue> extractSecurityIssues(String analysis) {
-
         List<SecurityIssue> issues = new ArrayList<>();
 
         Pattern pattern = Pattern.compile("🚨 SECURITY VULNERABILITY DETECTED.*?(?=🚨|✅|$)", Pattern.DOTALL);
-
         Matcher matcher = pattern.matcher(analysis);
 
         while (matcher.find()) {
-
             String block = matcher.group();
 
             String type = extractField(block, "\\*\\*Type:\\*\\*\\s*(.+?)\\n");
@@ -191,9 +201,7 @@ public class CerebrasService {
                     .build();
 
             issues.add(issue);
-
             log.info("🔴 Extracted issue: {} ({})", issue.getType(), issue.getSeverity());
-
         }
 
         return issues;
@@ -209,12 +217,10 @@ public class CerebrasService {
     }
 
     private String extractSecureFix(String block) {
-        // Prefer fenced code block after **SECURE FIX:**
         Pattern codeBlock = Pattern.compile("\\*\\*SECURE FIX:\\*\\*[\\s\\S]*?```[\\s\\S]*?```", Pattern.DOTALL);
         Matcher m = codeBlock.matcher(block);
         if (m.find()) {
             String section = m.group();
-            // Extract inner code fence contents
             Pattern inner = Pattern.compile("```[a-zA-Z0-9_-]*\\n([\\s\\S]*?)```", Pattern.DOTALL);
             Matcher innerM = inner.matcher(section);
             if (innerM.find()) {
@@ -222,7 +228,7 @@ public class CerebrasService {
             }
             return section.trim();
         }
-        // Fallback: capture paragraph after **SECURE FIX:** up to next ** or end
+
         String fallback = extractField(block, "\\*\\*SECURE FIX:\\*\\*\\s*([\\s\\S]*?)(?=\\n\\*\\*|$)");
         return fallback;
     }
@@ -235,12 +241,14 @@ public class CerebrasService {
                 return "✅ Analysis completed - No critical issues found";
             }
         }
+
         long criticalCount = issues.stream()
-                .filter(i -> "CRITICAL" .equalsIgnoreCase(i.getSeverity()))
+                .filter(i -> "CRITICAL".equalsIgnoreCase(i.getSeverity()))
                 .count();
         long highCount = issues.stream()
-                .filter(i -> "HIGH" .equalsIgnoreCase(i.getSeverity()))
+                .filter(i -> "HIGH".equalsIgnoreCase(i.getSeverity()))
                 .count();
+
         if (criticalCount > 0) {
             return String.format("🚨 CRITICAL: %d critical and %d high severity issues found", criticalCount, highCount);
         } else if (highCount > 0) {

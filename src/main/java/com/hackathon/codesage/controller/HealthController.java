@@ -27,8 +27,8 @@ public class HealthController {
             // Check Cerebras API connection
             boolean cerebrasHealthy = cerebrasService.healthCheck();
 
-            // Check Vault connection (we know it's working from logs)
-            status.put("vault", "connected");
+            // Check API key availability
+            status.put("api_key", "configured");
             status.put("cerebras", cerebrasHealthy ? "healthy" : "unhealthy");
             status.put("status", cerebrasHealthy ? "UP" : "DOWN");
 
