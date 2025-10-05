@@ -1,14 +1,3 @@
-# CodeSage - AI-Powered Code Mentor 🛡️
-
-> **AI-powered code mentor for pre-commit reviews** - Stop any code vulnerabilities before they commit!
-
-[![Docker](https://img.shields.io/badge/Docker-MCP-blue?logo=docker)](https://docker.com)
-[![Cerebras](https://img.shields.io/badge/AI-Cerebras-green?logo=openai)](https://cerebras.ai)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.6-brightgreen?logo=spring)](https://spring.io)
-[![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.java.net)
-
-## 🎯 The Problem We Solve
-
 # CodeSage 🧙‍♂️
 
 > **AI Code Mentor That Teaches Before You Commit**
