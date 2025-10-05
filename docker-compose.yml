@@ -1,16 +1,21 @@
+
+version: '3.8'
 services:
   codesage-app:
     build: .
     container_name: codesage-app
     ports:
       - "8080:8080"
+      - "8081:8081"   # ← Critical: expose MCP port
     env_file:
       - .env
     depends_on:
       - redis
+    volumes:
+      - .git:/app/.git   # needed for git hooks
     networks:
       - codesage-network
-  
+
   redis:
     image: redis:7-alpine
     container_name: codesage-redis
@@ -19,7 +24,7 @@ services:
     command: redis-server --appendonly yes
     networks:
       - codesage-network
-  
+
   nginx:
     image: nginx:alpine
     container_name: codesage-nginx

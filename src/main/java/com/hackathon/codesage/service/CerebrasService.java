@@ -1,3 +1,4 @@
+
 package com.hackathon.codesage.service;
 
 import com.hackathon.codesage.analyzer.PatternAnalyzer;
@@ -18,10 +19,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class CerebrasService {
@@ -48,10 +49,7 @@ public class CerebrasService {
 
     @Autowired
     private PatternAnalyzer patternAnalyzer;
-    
-    @Autowired
-    private DockerMCPService dockerMCPService;
-    
+
     @Autowired
     private ComprehensiveAnalysisService comprehensiveAnalysisService;
 
@@ -72,30 +70,34 @@ public class CerebrasService {
         try {
             log.info("🔍 Starting enhanced code analysis for: {}", fileName);
 
-            // Validate API key first
+            // Validate API key
             if (apiKey == null || apiKey.trim().isEmpty()) {
                 throw new IllegalStateException("CEREBRAS_API_KEY not found in .env file");
             }
 
-            // Step 1: Comprehensive Analysis (Security, Performance, Code Quality, Architecture, Clean Code)
+            // Step 1: Comprehensive Analysis
             log.info("🔍 Running comprehensive code analysis...");
             List<CodeIssue> comprehensiveIssues = comprehensiveAnalysisService.analyzeCodeComprehensively(code, language, fileName);
             log.info("✅ Comprehensive analysis completed: {} issues found", comprehensiveIssues.size());
 
-            // Step 2: Docker MCP Analysis
-            log.info("🐳 Running Docker MCP analysis...");
-            java.util.Map<String, Object> dockerResults = dockerMCPService.runContainerAnalysis(code, language, fileName);
-            log.info("✅ Docker MCP analysis completed");
+            // Step 2: Docker MCP Analysis → Not available in container
+            log.info("⚠️ Docker MCP analysis skipped: Not supported in Docker environment");
+            Map<String, Object> dockerResults = new HashMap<>();
+            dockerResults.put("dockerMCP", false);
+            dockerResults.put("containerAnalysis", "Not available in container");
+            dockerResults.put("containerName", "N/A");
+            dockerResults.put("language", language);
+            dockerResults.put("reason", "Docker-in-Docker not enabled");
 
             // Step 3: Pattern Analysis
             String context = patternAnalyzer.analyzeContext(code);
             log.info("📊 Context analysis: {}", context);
 
-            // Step 4: Enhanced context with all analysis results
+            // Step 4: Build enhanced context
             String enhancedContext = buildComprehensiveContext(context, dockerResults, comprehensiveIssues);
             log.info("📝 Enhanced context built: {} characters", enhancedContext.length());
 
-            // Step 5: AI Analysis with enhanced context
+            // Step 5: Build prompt and call AI
             String fullPrompt = promptLoader.buildPrompt(code, language, enhancedContext);
             log.info("📝 Prompt built: {} characters", fullPrompt.length());
 
@@ -110,12 +112,12 @@ public class CerebrasService {
             allIssues.addAll(comprehensiveIssues);
             allIssues.addAll(aiIssues);
 
-            // Step 8: Build enhanced response
+            // Step 8: Build final response
             return AnalysisResponse.builder()
                     .summary(extractComprehensiveSummary(analysisResult, allIssues))
                     .detailedAnalysis(analysisResult)
                     .issues(allIssues)
-                    .staticAnalysis(dockerResults) // Docker MCP results
+                    .staticAnalysis(dockerResults)
                     .status("SUCCESS")
                     .timestamp(LocalDateTime.now())
                     .fileName(fileName)
@@ -134,62 +136,53 @@ public class CerebrasService {
                     .build();
         }
     }
-    
+
     /**
      * Build comprehensive context combining all analysis results
      */
-    private String buildComprehensiveContext(String patternContext, java.util.Map<String, Object> dockerResults, List<CodeIssue> comprehensiveIssues) {
+    private String buildComprehensiveContext(String patternContext, Map<String, Object> dockerResults, List<CodeIssue> comprehensiveIssues) {
         StringBuilder enhanced = new StringBuilder();
-        
+
         enhanced.append("🔍 PATTERN ANALYSIS:\n");
         enhanced.append(patternContext).append("\n\n");
-        
+
         enhanced.append("🐳 DOCKER MCP ANALYSIS:\n");
+        enhanced.append("Status: Not available in container\n");
         enhanced.append("Container: ").append(dockerResults.get("containerName")).append("\n");
         enhanced.append("Language: ").append(dockerResults.get("language")).append("\n");
-        enhanced.append("Docker MCP: ").append(dockerResults.get("dockerMCP")).append("\n");
-        
-        if (dockerResults.containsKey("containerAnalysis")) {
-            enhanced.append("Container Analysis: ").append(dockerResults.get("containerAnalysis")).append("\n");
-        }
-        
-        enhanced.append("\n📊 COMPREHENSIVE ANALYSIS RESULTS:\n");
+        enhanced.append("Note: Docker MCP not supported in current container setup\n\n");
+
+        enhanced.append("📊 COMPREHENSIVE ANALYSIS RESULTS:\n");
         enhanced.append("Total Issues Found: ").append(comprehensiveIssues.size()).append("\n");
-        
-        // Group issues by category
-        java.util.Map<String, List<CodeIssue>> issuesByCategory = comprehensiveIssues.stream()
-                .collect(java.util.stream.Collectors.groupingBy(CodeIssue::getCategory));
-        
-        for (java.util.Map.Entry<String, List<CodeIssue>> entry : issuesByCategory.entrySet()) {
+
+        Map<String, List<CodeIssue>> issuesByCategory = comprehensiveIssues.stream()
+                .collect(Collectors.groupingBy(CodeIssue::getCategory));
+
+        for (Map.Entry<String, List<CodeIssue>> entry : issuesByCategory.entrySet()) {
             enhanced.append("\n").append(entry.getKey()).append(" Issues: ").append(entry.getValue().size()).append("\n");
             for (CodeIssue issue : entry.getValue()) {
                 enhanced.append("- ").append(issue.getType()).append(" (").append(issue.getSeverity()).append(")\n");
             }
         }
-        
+
         return enhanced.toString();
     }
-    
+
     /**
-     * Extract comprehensive summary from analysis results
+     * Extract comprehensive summary from AI analysis and issue list
      */
     private String extractComprehensiveSummary(String analysis, List<CodeIssue> issues) {
         if (issues.isEmpty()) {
             return "✅ PASS: No issues detected - Great job!";
         }
-        
-        // Count issues by severity and category
+
         long criticalCount = issues.stream().filter(i -> "CRITICAL".equalsIgnoreCase(i.getSeverity())).count();
         long highCount = issues.stream().filter(i -> "HIGH".equalsIgnoreCase(i.getSeverity())).count();
         long mediumCount = issues.stream().filter(i -> "MEDIUM".equalsIgnoreCase(i.getSeverity())).count();
         long lowCount = issues.stream().filter(i -> "LOW".equalsIgnoreCase(i.getSeverity())).count();
-        
-        // Count by category
-        java.util.Map<String, Long> categoryCount = issues.stream()
-                .collect(java.util.stream.Collectors.groupingBy(CodeIssue::getCategory, java.util.stream.Collectors.counting()));
-        
+
         StringBuilder summary = new StringBuilder();
-        
+
         if (criticalCount > 0) {
             summary.append("🚨 CRITICAL: ").append(criticalCount).append(" critical issues found");
         } else if (highCount > 0) {
@@ -199,35 +192,37 @@ public class CerebrasService {
         } else {
             summary.append("💡 LOW: ").append(lowCount).append(" low priority issues found");
         }
-        
+
+        Map<String, Long> categoryCount = issues.stream()
+                .collect(Collectors.groupingBy(CodeIssue::getCategory, Collectors.counting()));
+
         summary.append("\n📊 Issues by Category:\n");
-        for (java.util.Map.Entry<String, Long> entry : categoryCount.entrySet()) {
+        for (Map.Entry<String, Long> entry : categoryCount.entrySet()) {
             summary.append("- ").append(entry.getKey()).append(": ").append(entry.getValue()).append(" issues\n");
         }
-        
+
         return summary.toString();
     }
-    
+
     /**
-     * Extract code issues from AI analysis
+     * Extract code issues from AI analysis using regex
      */
     private List<CodeIssue> extractCodeIssues(String analysis) {
         List<CodeIssue> issues = new ArrayList<>();
-        
-        // Pattern to match issue blocks
+
         Pattern pattern = Pattern.compile("🚨.*?(?=🚨|✅|$)", Pattern.DOTALL);
         Matcher matcher = pattern.matcher(analysis);
-        
+
         while (matcher.find()) {
             String block = matcher.group();
-            
+
             String type = extractField(block, "\\*\\*Type:\\*\\*\\s*(.+?)\\n");
             String severity = extractField(block, "\\*\\*Severity:\\*\\*\\s*(\\w+)");
             String location = extractField(block, "\\*\\*Location:\\*\\*\\s*(.+?)\\n");
             String description = extractField(block, "\\*\\*Description:\\*\\*\\s*(.+?)(?=\\*\\*|$)");
             String recommendation = extractField(block, "\\*\\*Recommendation:\\*\\*\\s*(.+?)(?=\\*\\*|$)");
             String category = extractField(block, "\\*\\*Category:\\*\\*\\s*(.+?)\\n");
-            
+
             CodeIssue issue = CodeIssue.builder()
                     .type(type)
                     .severity(severity)
@@ -240,15 +235,17 @@ public class CerebrasService {
                     .bestPractice("Follow the recommendation")
                     .learningResource("https://github.com/your-repo/CodeSage")
                     .build();
-            
+
             issues.add(issue);
         }
-        
+
         return issues;
     }
 
+    /**
+     * Call Cerebras API for AI-powered analysis
+     */
     private String callCerebrasApi(String prompt) throws Exception {
-        // Validate API key
         if (apiKey == null || apiKey.trim().isEmpty()) {
             throw new IllegalStateException("CEREBRAS_API_KEY is not set in .env file");
         }
@@ -260,7 +257,17 @@ public class CerebrasService {
                 .messages(List.of(
                         CerebrasRequest.Message.builder()
                                 .role("system")
-                                .content("You are a senior code mentor and application security expert.\n\nGoals:\n- Teach developers as you go (concise mentoring).\n- Identify security, correctness, performance, and readability issues.\n- Provide step-by-step fixes, with before/after code where helpful.\n- Propose refactoring and testing strategies.\n- Keep answers structured and actionable, optimized for skimming.\n\nConstraints:\n- Use the exact SECURITY section markers if a vulnerability is found so tools can parse.\n- Prefer minimal, incremental changes; highlight trade-offs.\n- Be definitive when possible, and note assumptions explicitly.")
+                                .content("You are a senior code mentor and application security expert.\n\n" +
+                                        "Goals:\n" +
+                                        "- Teach developers as you go (concise mentoring).\n" +
+                                        "- Identify security, correctness, performance, and readability issues.\n" +
+                                        "- Provide step-by-step fixes, with before/after code where helpful.\n" +
+                                        "- Propose refactoring and testing strategies.\n" +
+                                        "- Keep answers structured and actionable, optimized for skimming.\n\n" +
+                                        "Constraints:\n" +
+                                        "- Use the exact SECURITY section markers if a vulnerability is found so tools can parse.\n" +
+                                        "- Prefer minimal, incremental changes; highlight trade-offs.\n" +
+                                        "- Be definitive when possible, and note assumptions explicitly.")
                                 .build(),
                         CerebrasRequest.Message.builder()
                                 .role("user")
@@ -282,25 +289,14 @@ public class CerebrasService {
 
         log.info("🌐 Calling Cerebras API: {}", apiUrl);
 
-        HttpResponse<String> httpResponse = httpClient.send(
-                request,
-                HttpResponse.BodyHandlers.ofString()
-        );
+        HttpResponse<String> httpResponse = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (httpResponse.statusCode() != 200) {
-            log.error("❌ Cerebras API error: Status {}, Body: {}",
-                    httpResponse.statusCode(),
-                    httpResponse.body());
-            throw new RuntimeException(
-                    "Cerebras API error: " + httpResponse.statusCode() + " - " + httpResponse.body());
+            log.error("❌ Cerebras API error: Status {}, Body: {}", httpResponse.statusCode(), httpResponse.body());
+            throw new RuntimeException("Cerebras API error: " + httpResponse.statusCode() + " - " + httpResponse.body());
         }
 
-        log.debug("📥 Response status: {}", httpResponse.statusCode());
-
-        CerebrasResponse cerebrasResponse = objectMapper.readValue(
-                httpResponse.body(),
-                CerebrasResponse.class
-        );
+        CerebrasResponse cerebrasResponse = objectMapper.readValue(httpResponse.body(), CerebrasResponse.class);
 
         if (cerebrasResponse.getChoices() == null || cerebrasResponse.getChoices().isEmpty()) {
             throw new RuntimeException("Empty response from Cerebras API");
@@ -318,37 +314,9 @@ public class CerebrasService {
         return content;
     }
 
-    private List<CodeIssue> extractSecurityIssues(String analysis) {
-        List<CodeIssue> issues = new ArrayList<>();
-
-        Pattern pattern = Pattern.compile("🚨 SECURITY VULNERABILITY DETECTED.*?(?=🚨|✅|$)", Pattern.DOTALL);
-        Matcher matcher = pattern.matcher(analysis);
-
-        while (matcher.find()) {
-            String block = matcher.group();
-
-            String type = extractField(block, "\\*\\*Type:\\*\\*\\s*(.+?)\\n");
-            String severity = extractField(block, "\\*\\*Severity:\\*\\*\\s*(\\w+)");
-            String location = extractField(block, "\\*\\*Location:\\*\\*\\s*(.+?)\\n");
-            String description = extractField(block, "\\*\\*ATTACK SCENARIO:\\*\\*\\s*(.+?)(?=\\*\\*|$)");
-            String recommendation = extractSecureFix(block);
-
-            CodeIssue issue = CodeIssue.builder()
-                    .type(type)
-                    .severity(severity)
-                    .location(location)
-                    .description(description)
-                    .recommendation(recommendation)
-                    .category("Security")
-                    .build();
-
-            issues.add(issue);
-            log.info("🔴 Extracted issue: {} ({})", issue.getType(), issue.getSeverity());
-        }
-
-        return issues;
-    }
-
+    /**
+     * Extract field using regex
+     */
     private String extractField(String text, String regex) {
         Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
         Matcher matcher = pattern.matcher(text);
@@ -358,54 +326,15 @@ public class CerebrasService {
         return "Not specified";
     }
 
-    private String extractSecureFix(String block) {
-        Pattern codeBlock = Pattern.compile("\\*\\*SECURE FIX:\\*\\*[\\s\\S]*?```[\\s\\S]*?```", Pattern.DOTALL);
-        Matcher m = codeBlock.matcher(block);
-        if (m.find()) {
-            String section = m.group();
-            Pattern inner = Pattern.compile("```[a-zA-Z0-9_-]*\\n([\\s\\S]*?)```", Pattern.DOTALL);
-            Matcher innerM = inner.matcher(section);
-            if (innerM.find()) {
-                return innerM.group(1).trim();
-            }
-            return section.trim();
-        }
-
-        String fallback = extractField(block, "\\*\\*SECURE FIX:\\*\\*\\s*([\\s\\S]*?)(?=\\n\\*\\*|$)");
-        return fallback;
-    }
-
-    private String extractSummary(String analysis, List<CodeIssue> issues) {
-        if (issues.isEmpty()) {
-            if (analysis.contains("✅ NO SECURITY VULNERABILITIES DETECTED")) {
-                return "✅ PASS: No security vulnerabilities detected";
-            } else {
-                return "✅ Analysis completed - No critical issues found";
-            }
-        }
-
-        long criticalCount = issues.stream()
-                .filter(i -> "CRITICAL".equalsIgnoreCase(i.getSeverity()))
-                .count();
-        long highCount = issues.stream()
-                .filter(i -> "HIGH".equalsIgnoreCase(i.getSeverity()))
-                .count();
-
-        if (criticalCount > 0) {
-            return String.format("🚨 CRITICAL: %d critical and %d high severity issues found", criticalCount, highCount);
-        } else if (highCount > 0) {
-            return String.format("⚠️ WARNING: %d high severity issues found", highCount);
-        } else {
-            return String.format("ℹ️ INFO: %d issues found", issues.size());
-        }
-    }
-
+    /**
+     * Health check for Cerebras API
+     */
     public boolean healthCheck() {
         try {
             log.info("🏥 Performing Cerebras API health check...");
             String testPrompt = "Respond with 'OK' if you can read this message.";
             String response = callCerebrasApi(testPrompt);
-            boolean isHealthy = response != null && !response.trim().isEmpty();
+            boolean isHealthy = response != null && response.contains("OK");
             log.info("🏥 Health check result: {}", isHealthy ? "✅ HEALTHY" : "❌ UNHEALTHY");
             return isHealthy;
         } catch (Exception e) {
