@@ -1,5 +1,6 @@
 package com.hackathon.codesage.controller;
 
+import com.hackathon.codesage.model.AnalysisRequest;
 import com.hackathon.codesage.model.AnalysisResponse;
 import com.hackathon.codesage.service.CerebrasService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,19 +17,19 @@ public class CodeAnalysisController {
     private CerebrasService cerebrasService;
 
     @PostMapping("/analyze")
-    public ResponseEntity<Map<String, Object>> analyzeCode(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> analyzeCode(@RequestBody AnalysisRequest request) {
         long startTime = System.currentTimeMillis();
 
         try {
-            String code = request.get("code");
-            String fileName = request.get("fileName");
-            String language = request.get("language");
+            String code = request.getCode();
+            String fileName = request.getFileName();
+            String language = request.getLanguage();
 
             // Auto-detect language if not provided
             if (language == null && fileName != null) {
                 language = detectLanguage(fileName);
             }
-            if (language == null) language = "javascript";
+            if (language == null) language = "java";
 
             if (code == null || code.trim().isEmpty()) {
                 return ResponseEntity.badRequest()
@@ -39,23 +40,24 @@ public class CodeAnalysisController {
                         ));
             }
 
-            // Call the service (returns AnalysisResponse now)
+            // Call the service
             AnalysisResponse analysisResult = cerebrasService.analyzeCode(code, language, fileName);
             long responseTime = System.currentTimeMillis() - startTime;
 
-            // Convert AnalysisResponse to Map for backward compatibility
+            // ✅ MAKE IT MATCH THE MCP FORMAT
             return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "analysis", analysisResult.getDetailedAnalysis(),
-                    "summary", analysisResult.getSummary(),
-                    "issues", analysisResult.getIssues(),
-                    "responseTimeMs", responseTime,
+                    "feedback", analysisResult.getDetailedAnalysis(),  // Rename to match MCP
                     "status", analysisResult.getStatus(),
-                    "poweredBy", "Cerebras + Llama 3.1"
+                    "issues", analysisResult.getIssues(),
+                    "summary", analysisResult.getSummary(),
+                    "success", true,
+                    "poweredBy", "Cerebras + Llama 3.1",
+                    "responseTimeMs", responseTime
             ));
 
         } catch (Exception e) {
             long responseTime = System.currentTimeMillis() - startTime;
+
             return ResponseEntity.internalServerError()
                     .body(Map.of(
                             "success", false,
@@ -123,6 +125,6 @@ public class CodeAnalysisController {
         if (lowerFileName.endsWith(".swift")) return "swift";
         if (lowerFileName.endsWith(".scala")) return "scala";
 
-        return "javascript"; // default
+        return "java"; // default
     }
 }

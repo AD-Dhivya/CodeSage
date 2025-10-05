@@ -42,6 +42,7 @@ public class McpServer extends NanoHTTPD {
 
         if (method == Method.POST && "/mcp/v1/analyze".equals(uri)) {
             try {
+                long startTime = System.currentTimeMillis();
                 // Read POST body
                 Map<String, String> files = new java.util.HashMap<>();
                 session.parseBody(files);
@@ -55,13 +56,20 @@ public class McpServer extends NanoHTTPD {
 
                 // Call AI
                 var result = cerebrasService.analyzeCode(code, language, filename);
+                long responseTimeInMs = System.currentTimeMillis() - startTime;
 
                 // Return structured response
                 String jsonResponse = objectMapper.writeValueAsString(Map.of(
                         "feedback", result.getDetailedAnalysis(),
-                        "summary", result.getSummary(),
+                        "status", result.getStatus(),
                         "issues", result.getIssues(),
-                        "status", result.getStatus()
+                        "summary", result.getSummary(),
+                        "success", true,
+                        "poweredBy", "Cerebras + Llama 3.1",
+                        "responseTimeMs", responseTimeInMs
+
+
+
                 ));
 
                 Response response = newFixedLengthResponse(Response.Status.OK, "application/json", jsonResponse);

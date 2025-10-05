@@ -69,6 +69,8 @@ public class CerebrasService {
 
     @Cacheable(value = "analysis", key = "#code.hashCode()")
     public AnalysisResponse analyzeCode(String code, String language, String fileName) {
+        long startTime = System.currentTimeMillis();
+        long responseTimeMs = 0;
         try {
             log.info("🔍 Starting enhanced code analysis for: {}", fileName);
 
@@ -114,7 +116,8 @@ public class CerebrasService {
             allIssues.addAll(comprehensiveIssues);
             allIssues.addAll(aiIssues);
 
-            // Step 8: Build final response
+            // Step 8: Build final response WITH STANDARDIZED FIELDS
+            responseTimeMs = System.currentTimeMillis() - startTime;
             return AnalysisResponse.builder()
                     .summary(extractComprehensiveSummary(analysisResult, allIssues))
                     .detailedAnalysis(analysisResult)
@@ -124,6 +127,9 @@ public class CerebrasService {
                     .timestamp(LocalDateTime.now())
                     .fileName(fileName)
                     .language(language)
+                    .responseTimeMs(responseTimeMs)
+                    .poweredBy("Cerebras + Llama 3.1")
+                    .success(true)
                     .build();
         } catch (Exception e) {
             log.error("❌ Analysis failed for {}: {}", fileName, e.getMessage(), e);
@@ -135,6 +141,9 @@ public class CerebrasService {
                     .timestamp(LocalDateTime.now())
                     .fileName(fileName)
                     .language(language)
+                    .responseTimeMs(responseTimeMs)
+                    .poweredBy("Cerebras + Llama 3.1")
+                    .success(false)
                     .build();
         }
     }
