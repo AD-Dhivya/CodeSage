@@ -20,14 +20,19 @@ public class McpInitializer {
     public void init() {
         System.out.println("🚀 Starting MCP Server for AI-native IDE support...");
         mcpServer = new McpServer(cerebrasService);
-        new Thread(mcpServer::start).start();
+        new Thread(mcpServer::startServer).start();
+
+        // Give server time to start
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException ignored) {}
     }
 
     @PreDestroy
     public void destroy() {
         System.out.println("🛑 Shutting down MCP Server...");
         if (mcpServer != null) {
-            mcpServer.stop();
+            mcpServer.stopServer();
         }
     }
 }

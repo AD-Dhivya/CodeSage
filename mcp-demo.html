@@ -1,0 +1,52 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CodeSage MCP Demo</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        .terminal { background: #000; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        button { background: #0078d7; color: white; border: none; padding: 8px 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+<h1>CodeSage MCP Integration Demo</h1>
+<p>Proving IDE-agnostic MCP compatibility</p>
+
+<div class="terminal">
+    <h3>1. Send code to MCP server</h3>
+    <textarea id="code" rows="5" style="width:100%; background:#252526; color:#d4d4d4;">
+public class Demo {
+  public static void main(String[] args) {
+    int x = 10; // Bad variable name
+    System.out.println(x);
+  }
+}</textarea>
+    <button onclick="analyze()">🔍 Analyze Code</button>
+</div>
+
+<div class="terminal">
+    <h3>2. AI Feedback (from your server)</h3>
+    <pre id="response" style="min-height: 200px;">Click "Analyze Code" to see MCP response</pre>
+</div>
+
+<script>
+
+    async function analyze() {
+      const code = document.getElementById('code').value;
+      // Create a JSON object with the code in the 'text' field
+      const payload = { text: code };
+      const response = await fetch('http://localhost:8081/mcp/v1/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.text();
+      document.getElementById('response').textContent = result;
+    }
+
+</script>
+</body>
+</html>
