@@ -1,6 +1,6 @@
 # CodeSage - AI-Powered Code Mentor 🛡️
 
-> **AI-powered security mentor for pre-commit reviews** - Stop security vulnerabilities before they commit!
+> **AI-powered code mentor for pre-commit reviews** - Stop any code vulnerabilities before they commit!
 
 [![Docker](https://img.shields.io/badge/Docker-MCP-blue?logo=docker)](https://docker.com)
 [![Cerebras](https://img.shields.io/badge/AI-Cerebras-green?logo=openai)](https://cerebras.ai)
