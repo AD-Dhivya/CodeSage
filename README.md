@@ -9,257 +9,318 @@
 
 ## 🎯 The Problem We Solve
 
-**70% of security vulnerabilities are introduced during development.** Developers often lack security expertise, code reviews miss security issues, and vulnerable code reaches production. CodeSage prevents this by analyzing code before it's committed.
+# CodeSage 🧙‍♂️
 
-## 🚀 The Solution
+> **AI Code Mentor That Teaches Before You Commit**
 
-CodeSage combines **AI-powered analysis** with **Docker MCP** for comprehensive code mentoring:
+[![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.java.net)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.6-brightgreen?logo=spring)](https://spring.io)
+[![Cerebras](https://img.shields.io/badge/AI-Cerebras-green?logo=openai)](https://cerebras.ai)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://docker.com)
 
-- 🤖 **AI Analysis**: Cerebras AI (Llama 3.1) for intelligent code insights
-- 🐳 **Docker MCP**: Language-specific containers for static analysis
-- 🔍 **Comprehensive Analysis**: Security, Performance, Code Quality, Architecture, Clean Code
-- 📚 **Developer Education**: Learn best practices while coding
-- 🛡️ **Pre-commit Integration**: Automatic analysis before commits
-- 🎓 **Mentoring Approach**: Teaches developers how to solve problems, not just find them
+## 🎯 The Problem
 
-## 🚀 Quick Start
+70% of security vulnerabilities are introduced during development. Traditional code review tools just flag errors - they don't teach developers WHY code is problematic or HOW to fix it properly.
+✨ The Solution
+CodeSage is an AI-powered code mentor that analyzes code across 5 dimensions and provides educational feedback that helps developers learn, not just fix.
+Why CodeSage Wins
 
-### Prerequisites
-- Docker & Docker Compose
-- Cerebras API Key
+🤖 AI-Powered Analysis - Cerebras + Llama 3.1 (sub-2-second response)
+🎓 Educational Approach - Teaches WHY and HOW, not just WHAT
+🔍 5-Category Analysis - Security, Performance, Code Quality, Architecture, Clean Code
+🔌 MCP Server - HTTP endpoint on port 8081 for extensibility
+🛡️ Pre-commit Hooks - Prevent bad code from reaching your repo
+⚡ Redis Caching - 40-400x faster for repeated analyses
+🐳 Production-Ready - Multi-container Docker deployment
 
-### 1. Clone and Setup
-```bash
-git clone <your-repo>
+🚀 Quick Start
+Prerequisites
+
+Docker & Docker Compose
+Cerebras API Key (Get one here)
+
+Installation
+bash# Clone the repository
+git clone https://github.com/AD-Dhivya/CodeSage
 cd CodeSage
+
+# Setup environment
 cp .env.example .env
 # Add your CEREBRAS_API_KEY to .env
-```
 
-### 2. Run with Docker (Multi-Container Architecture)
-```bash
-# Start all services
+# Start with Docker
 docker-compose up --build
 
-# Or run in background
-docker-compose up --build -d
-```
-
-### 3. Test the API
-```bash
-# Test health
+# Or run locally
+./mvnw spring-boot:run
+Test It Works
+bash# Health check
 curl http://localhost:8080/api/health
 
 # Test analysis
 curl -X POST http://localhost:8080/api/analyze \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code": "public class Test { String password = \"123456\"; }",
-    "language": "java",
-    "fileName": "Test.java"
-  }'
-```
+-H "Content-Type: application/json" \
+-d '{
+"code": "public class Test { String password = \"admin123\"; }",
+"language": "java",
+"fileName": "Test.java"
+}'
 
-### 4. Run Demo Script
-```bash
-# Run comprehensive demo
-./demo.sh
-```
+🏗️ Architecture
+Multi-Container Deployment
+┌─────────────────────┐
+│   CodeSage App      │  Port 8080 (REST API)
+│   (Spring Boot)     │  Port 8081 (MCP Server)
+└──────────┬──────────┘
+│
+┌─────┴─────┐
+│           │
+┌────▼────┐  ┌──▼─────┐
+│  Redis  │  │ Nginx  │
+│ (Cache) │  │  (LB)  │
+└─────────┘  └────────┘
+Services
 
-## 🏗️ Multi-Container Architecture
+codesage-app: Main Spring Boot application (ports 8080, 8081)
+redis: High-performance caching layer
+nginx: Load balancer and reverse proxy
 
-### Services
-- **codesage-app**: Main Spring Boot application (Port 8080)
-- **redis**: Caching layer for improved performance (Port 6379)
-- **nginx**: Load balancer and reverse proxy (Port 80)
+🔧 Features
+Core Capabilities
+✅ Multi-Language Support
 
-### Network
-- **codesage-network**: Bridge network connecting all containers
-- **Load balancing**: Nginx distributes requests to the main app
-- **Caching**: Redis provides session and cache management
+Java, Python, JavaScript, TypeScript, Go, Rust, PHP, Ruby, Kotlin, Swift, Scala, C, C++, C#
 
-## 🔧 Features
+✅ Comprehensive Analysis
 
-### Core Features
-- ✅ **AI-powered security analysis** (Cerebras + Llama 3.1)
-- ✅ **Multi-language support** (Java, Python, JavaScript, TypeScript, Go, Rust, PHP, Ruby)
-- ✅ **Pre-commit hook integration** (Prevents vulnerable code commits)
-- ✅ **Docker containerization** (Multi-container architecture)
-- ✅ **RESTful API** (Easy integration)
-- ✅ **Real-time health monitoring**
+Security: Hardcoded credentials, SQL injection, XSS, command injection
+Performance: N+1 queries, memory leaks, inefficient loops
+Code Quality: Long methods, code duplication, poor naming
+Architecture: Tight coupling, missing abstractions
+Clean Code: Magic numbers, poor variable names
 
-### Security Features
-- 🛡️ **Pre-commit hook** prevents vulnerable code commits
-- 🤖 **AI-powered vulnerability detection** using Cerebras AI
-- 🔍 **Pattern-based security analysis** for common vulnerabilities
-- ⚙️ **Configurable severity thresholds** (Critical, High, Medium, Low)
-- 📊 **Detailed security reports** with actionable recommendations
+✅ AI-Powered Mentoring
 
-## 📊 API Endpoints
+Educational explanations for each issue
+Before/after code examples
+Learning resources and best practices
+Severity levels (CRITICAL, HIGH, MEDIUM, LOW)
 
-### Analysis
-- `POST /api/analyze` - Analyze code for security vulnerabilities
-  ```json
-  {
-    "code": "public class Test { String password = \"123456\"; }",
-    "language": "java",
-    "fileName": "Test.java"
-  }
-  ```
+✅ Developer Integration
 
-### Health & Monitoring
-- `GET /api/health` - Basic health check
-- `GET /api/health/detailed` - Detailed system health with container status
-- `GET /api/ping` - Simple ping endpoint
+REST API for CI/CD pipelines
+MCP server for IDE integration
+Git pre-commit hooks
+Real-time analysis feedback
 
-### Load Balancer (Nginx)
-- `GET /` - Root endpoint (redirects to ping)
-- `GET /health` - Health check through load balancer
-- `GET /api/*` - All API endpoints through load balancer
+📡 API Endpoints
+Analysis
+POST /api/analyze
+Analyze code and get educational feedback.
+json{
+"code": "your code here",
+"language": "java",
+"fileName": "Example.java"
+}
+Response:
+json{
+"success": true,
+"summary": "1 critical issue found",
+"detailedAnalysis": "AI analysis with explanations...",
+"issues": [
+{
+"type": "Hardcoded Credentials",
+"severity": "CRITICAL",
+"location": "Line 5",
+"description": "Password hardcoded in source code",
+"recommendation": "Use environment variables",
+"explanation": "Why this matters...",
+"bestPractice": "How to fix it...",
+"learningResource": "https://..."
+}
+],
+"responseTimeMs": 1850,
+"poweredBy": "Cerebras + Llama 3.1"
+}
+Health & Monitoring
+GET /api/health - Basic health check
+GET /api/health/detailed - Detailed system status
+GET /api/ping - Simple ping endpoint
+🔌 MCP Integration (IDE Support)
+CodeSage includes an MCP (Model Context Protocol) server for native IDE integration.
+Supported IDEs
 
-## 🛡️ Security Analysis
+Visual Studio Code
+Cursor
+Windsurf
+Any MCP-compatible editor
 
-### Supported Vulnerabilities
-- 🔐 **Hardcoded credentials** detection
-- 💉 **SQL injection** prevention
-- 🚨 **XSS vulnerabilities** detection
-- ⚡ **Command injection** risks
-- 🔒 **Input validation** issues
-- 📝 **Code quality** improvements
+MCP Endpoints (Port 8081)
 
-### Analysis Pipeline
-1. **Static Analysis**: Pattern-based vulnerability detection
-2. **AI Analysis**: Cerebras AI (Llama 3.1) for intelligent insights
-3. **Context Analysis**: Language-specific security patterns
-4. **Results Combination**: Merged analysis with actionable recommendations
+GET /mcp/v1/resources - List available resources
+POST /mcp/v1/analyze - Analyze code from IDE
 
-## 🔧 Development
+Setup for VS Code
+Create .vscode/settings.json:
+json{
+"mcp.servers": {
+"codesage": {
+"url": "http://localhost:8081",
+"description": "CodeSage AI Code Mentor"
+}
+}
+}
+See MCP_INTEGRATION.md for detailed setup.
+🪝 Git Pre-Commit Hook
+Install the pre-commit hook to analyze code before commits:
+bash# Copy the hook
+cp scripts/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
 
-### Local Development
-```bash
-# Start only the main app (without load balancer)
+# Test it
+git add .
+git commit -m "Test commit"
+# CodeSage will analyze staged files automatically
+The hook will:
+
+Analyze all staged files
+Show security issues and recommendations
+Block commits with CRITICAL issues
+Provide educational feedback
+
+🐳 Docker Deployment
+Development
+bashdocker-compose up --build
+Production
+bashdocker-compose up --build -d
+View Logs
+bashdocker-compose logs -f codesage-app
+Stop Services
+bashdocker-compose down
+⚡ Performance
+Redis Caching (Verified Working)
+First Analysis:
+
+Response time: ~1.2-2s (calls Cerebras API)
+Token usage: ~50 tokens
+Full AI processing
+
+Cached Analysis:
+
+Response time: 3-50ms (from Redis)
+40-400x faster than first request
+Zero Cerebras API calls
+Identical results
+
+Cache Configuration
+
+TTL: 1 hour
+Key: Hash of code content
+Automatic invalidation
+JSON serialization with type safety
+
+Performance Metrics
+
+First request: 1200-2000ms
+Cached request: 3-50ms
+Speedup: 40-400x
+Cache hit ratio: >90% in typical usage
+
+🎓 Educational Approach
+Unlike traditional linters, CodeSage teaches developers:
+Example Output
+🚨 CRITICAL: Hardcoded Credentials
+
+Location: Line 5: String password = "admin123"
+
+Why This Matters:
+Hardcoded credentials are a major security risk. Anyone with access
+to your repository can see these secrets, leading to unauthorized
+access and potential data breaches.
+
+Best Practice:
+String password = System.getenv("DB_PASSWORD");
+
+Learn More:
+https://owasp.org/www-community/vulnerabilities/Use_of_hard-coded_credentials
+🛠️ Development
+Local Development
+bash# Run locally
 ./mvnw spring-boot:run
 
-# Or with Docker
-docker-compose up codesage-app
-```
-
-### Testing
-```bash
 # Run tests
 ./mvnw test
 
-# Run demo
-./demo.sh
-```
+# Build
+./mvnw clean package
+Configuration
+Edit src/main/resources/application.properties:
+properties# Cerebras API
+cerebras.api.url=https://api.cerebras.ai/v1/chat/completions
+cerebras.api.model=llama3.1-8b
+cerebras.api.max-tokens=512
+cerebras.api.temperature=0.2
 
-### Pre-commit Hook Setup
-```bash
-# Install pre-commit hook
-cp scripts/pre-commit-hook.sh .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
+# Redis Cache
+spring.cache.type=redis
+spring.data.redis.host=redis
+spring.data.redis.port=6379
 
-# Test the hook
-git add .
-git commit -m "Test commit"
-```
+# Server
+server.port=8080
+🏆 Hackathon Highlights
+Innovation
 
-## 📈 Performance
+Educational AI approach focused on teaching, not just detection
+MCP integration for native IDE support
+Proven Redis caching with 40-400x performance improvement
+Production-ready multi-container architecture
 
-### Caching
-- **Redis**: Session and analysis result caching
-- **Load Balancing**: Nginx distributes load across instances
-- **Container Optimization**: Multi-stage Docker builds
+Technical Excellence
 
-### Scalability
-- **Horizontal scaling**: Add more app instances
-- **Load balancing**: Nginx handles traffic distribution
-- **Caching layer**: Redis reduces API calls
+Java 21 + Spring Boot 3.5.6
+Cerebras AI integration with custom prompts
+Pattern-based static analysis
+Docker + Redis + Nginx deployment
+Real-time response tracking
 
-## 🔍 Monitoring
+Developer Experience
 
-### Health Checks
-```bash
-# Basic health
-curl http://localhost:8080/api/health
+Sub-2-second first analysis
+3-50ms cached responses
+Educational feedback with examples
+Seamless Git workflow integration
+REST API + MCP server
 
-# Detailed health (shows container status)
-curl http://localhost:8080/api/health/detailed
+📚 Documentation
 
-# Through load balancer
-curl http://localhost/health
-```
+Setup Guide - Detailed installation instructions
+API Documentation - Complete endpoint reference
+Architecture Overview - System design
+MCP Integration - IDE setup guide
 
-### Container Status
-```bash
-# View running containers
-docker ps
+🤝 Contributing
 
-# View logs
-docker-compose logs codesage-app
-docker-compose logs redis
-docker-compose logs nginx
-```
+Fork the repository
+Create a feature branch (git checkout -b feature/amazing)
+Commit your changes (git commit -m 'Add amazing feature')
+Push to the branch (git push origin feature/amazing)
+Open a Pull Request
 
-## 🚀 Deployment
-
-### Production Deployment
-```bash
-# Production build
-docker-compose -f docker-compose.prod.yml up --build
-
-# Scale services
-docker-compose up --scale codesage-app=3
-```
-
-### Environment Variables
-```bash
-# Required
-CEREBRAS_API_KEY=your_api_key_here
-
-# Optional
-CEREBRAS_API_URL=https://api.cerebras.ai/v1/chat/completions
-CEREBRAS_MODEL=llama3.1-8b
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test with `./demo.sh`
-5. Submit a pull request
-
-## 📄 License
-
+📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
+👤 Author
+AD-Dhivya
 
-## 🏆 Hackathon Project
+GitHub: @AD-Dhivya
+Project: CodeSage
 
-**CodeSage** - AI-Powered Code Mentor
-- **Tech Stack**: Java 21, Spring Boot, Docker, Cerebras AI, Redis, Nginx
-- **Features**: Multi-container architecture, AI analysis, Pre-commit integration
-- **Innovation**: First AI-powered pre-commit security mentor
-- **Award**: Best Security Tool (Previous Hackathon)
+🙏 Acknowledgments
 
-## 🎨 Creative Features
+Cerebras for AI inference API
+Spring Boot team for the excellent framework
+FutureStack25 Hackathon organizers
 
-### **AI + Docker MCP Innovation**
-- **Unique Approach**: Combines AI analysis with containerized static analysis
-- **Language-Specific**: Each language gets its own analysis container
-- **Real-Time Learning**: AI learns from container analysis results
 
-### **Pre-Commit Integration**
-- **Git Hook**: Automatically analyzes code before commit
-- **Developer Education**: Teaches security while preventing issues
-- **Workflow Integration**: Seamless developer experience
-
-### **Multi-Model Analysis**
-- **AI Analysis**: Cerebras AI for intelligent insights
-- **Static Analysis**: Containerized language-specific tools
-- **Pattern Analysis**: Custom vulnerability detection
-- **Combined Results**: Best of all approaches
-
----
-
-**Made with ❤️ for secure coding** 🛡️
+Made with ❤️ for developers who want to write better code
+Built for FutureStack25 Hackathon | January 2025

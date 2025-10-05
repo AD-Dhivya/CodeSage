@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -66,6 +67,7 @@ public class CerebrasService {
         log.info("🔑 CerebrasService initialized - API key loaded from .env");
     }
 
+    @Cacheable(value = "analysis", key = "#code.hashCode()")
     public AnalysisResponse analyzeCode(String code, String language, String fileName) {
         try {
             log.info("🔍 Starting enhanced code analysis for: {}", fileName);
