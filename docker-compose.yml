@@ -6,3 +6,32 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    depends_on:
+      - redis
+    networks:
+      - codesage-network
+  
+  redis:
+    image: redis:7-alpine
+    container_name: codesage-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - codesage-network
+  
+  nginx:
+    image: nginx:alpine
+    container_name: codesage-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - codesage-app
+    networks:
+      - codesage-network
+
+networks:
+  codesage-network:
+    driver: bridge
